@@ -23,7 +23,8 @@ enum EncodingType {
     PCN = 3,
     PSN3 = 4,
     PCN3 = 5,
-    PAIRWISE = 6
+    PAIRWISE = 6,
+    CODISH = 7
 };
 
 template <class Solver>
@@ -34,6 +35,7 @@ private:
     Lit makeAtMostITE(vector<Lit> lits, unsigned k, map<pair<int,int>, Lit>& subexprs);
     bool makeAtMostPairNet(const vector<Lit>& lits, unsigned const k, bool cardnet, vector<Lit>* outvars);
     bool makeAtMostPairwise(const vector<Lit>& lits, const int k);
+    bool makeAtMostCodish(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
     
     // Produce a sorting network, filling in outvars and constraints with the created output variables and network constraints
     void makeSortNet(vector<Lit>& invars, vector<Lit>& outvars);
@@ -41,6 +43,9 @@ private:
     // Produce a cardinality network, filling in outvars and constraints with the created output variables and network constraints
     // Returns true if "all false" condition triggered (k=0)
     bool makeCardNet(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k);
+
+    // Siec selekcji Codisha
+    void makeCodish(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k);
     
     // Pairwise Splitting
     void pwSplit(vector<Lit> const& in, vector<Lit>& out1, vector<Lit>& out2);
@@ -56,7 +61,7 @@ private:
     //  i.e., create all (n choose k+1) subsets of size k+1 from the n literals in the AtMost,
     //        and make a clause stating at least one must be false from each set.
     void buildPairwise(const vector<Lit>& lits, vec<Lit>& clause, int highest, const int k);
-
+    
     // MiniSAT Solver
     Solver* S;
 
@@ -110,6 +115,8 @@ bool Encoding<Solver>::makeAtMost(const vector<Lit>& lits, unsigned const k, vec
         return makeAtMostPairNet(lits, k, true,outvars);
     case PAIRWISE:
         return makeAtMostPairwise(lits, k);
+    case CODISH:
+        return makeAtMostCodish(lits, k, outvars);
     default:
         assert(0);
         return false;
@@ -226,6 +233,31 @@ Lit Encoding<Solver>::makeAtMostITE(vector<Lit> lits, unsigned k, map<pair<int,i
 }
 
 template<class Solver>
+bool Encoding<Solver>::makeAtMostCodish(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars) {
+    // input vars
+    vector<Lit> invars;
+    for (unsigned i = 0 ; i < lits.size() ; i++) {
+        invars.push_back(lits[i]);
+    }
+    
+    //output vars
+    vector<Lit> outvars;
+
+    makeCodish(invars, outvars, k);
+    
+    for (unsigned i = 0 ; i < outvars.size() ; i++) {
+        if (outvars[i] == lit_Undef)  continue;
+	if (p_outvars) {
+            p_outvars->push_back(outvars[i]);
+        }
+    }
+
+    S->addClause(~outvars[k+1]);
+    
+    return true;
+}
+
+template<class Solver>
 bool Encoding<Solver>::makeAtMostPairNet(const vector<Lit>& lits, unsigned const k, bool const cardnet, vector<Lit>* p_outvars) {
     //  AtMost(lits, k) :=
     //    (Out = Sort(lits)) ^ (Out[k+1] = 0)
@@ -288,7 +320,7 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
 
     vec<Lit> args; // reused
 
-    if (ctype == PSN3 || ctype == PCN3) {
+    if (ctype == PSN3 || ctype == PCN3 || ctype == CODISH) {
         // 3-clause comparator,
         // because AtMosts only need implications from 0 on the outputs to 0 on the inputs
 
@@ -347,6 +379,45 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
    }
 }
 
+template<class Solver>
+void Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k) {
+    assert(outvars.empty());
+    if (k == 0) {
+        for (unsigned i = 0 ; i < invars.size() ; i++) {
+            outvars.push_back(lit_Undef);
+            // May be receiving lit_Undef, indicating a FALSE already.
+            // In that case, no constraint to add.
+            if (invars[i] != lit_Undef) {
+                S->addClause(~invars[i]);
+            }
+        }
+        return true;
+    }
+
+    if (invars.size() == 2) {
+        // make a simple comparator
+        outvars.push_back(lit_Error);
+        outvars.push_back(lit_Error);
+        makeComparator(invars[0], invars[1], outvars[0], outvars[1]);
+        return false;
+    }
+
+    // pad invars to have an even number of literals
+    if (invars.size() % 2 != 0) {
+        invars.push_back(lit_Undef);
+    }
+
+    // do the complicated stuff
+    vector<Lit> out1, out2;
+    pwSplit(invars, out1, out2);
+
+
+
+
+
+    return false;
+}
+ 
 template<class Solver>
 void Encoding<Solver>::makeSortNet(vector<Lit>& invars, vector<Lit>& outvars) {
     // Pairwise Sorting Network, as described in "pairwise cardinality networks"
