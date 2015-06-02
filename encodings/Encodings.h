@@ -391,9 +391,6 @@ bool Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, uns
     assert(outvars.empty());
     if (k == 0) {
         for (unsigned i = 0 ; i < invars.size() ; i++) {
-            outvars.push_back(lit_Undef);
-            // May be receiving lit_Undef, indicating a FALSE already.
-            // In that case, no constraint to add.
             if (invars[i] != lit_Undef) {
                 S->addClause(~invars[i]);
             }
@@ -401,6 +398,16 @@ bool Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, uns
         return true;
     }
 
+    if (k >= invars.size()) {
+        makeSortNet(invars, outvars);
+        return false;
+    }
+    
+    if (invars.size() == 1) {
+        outvars.push_back(invars[0]);
+        return false;
+    }
+    
     if (invars.size() == 2) {
         // make a simple comparator
         outvars.push_back(lit_Error);
@@ -421,13 +428,32 @@ bool Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, uns
     // recursive calls
     vector<Lit> sorted1, sorted2;
     makeCodish(out1, sorted1, k);
-    bool allFalse = makeCardNet(out2, sorted2, k>>1);
+    bool allFalse = makeCodish(out2, sorted2, k>>1);
 
+    //maintaining invariant |outvars| >= min(k, |invars|)
+    while (sorted1.size() < k) sorted1.push_back(lit_Undef);
+    
     // merge
     if (!allFalse) {
-      while (sorted1.size() > k) sorted1.pop_back();
-      while (sorted2.size() > k) sorted2.pop_back();
+
+      // making |sorted1|=|sorted2|=k
+      while (sorted1.size() > k) {
+	if (sorted1.back() != lit_Undef) {
+	  S->addClause(~sorted1.back());
+	}
+	sorted1.pop_back();
+      }
+      
+      while (sorted2.size() > k) {
+	if (sorted2.back() != lit_Undef) {
+	  S->addClause(~sorted2.back());
+	}
+	sorted2.pop_back();
+      }
+      
       while (sorted2.size() < k) sorted2.push_back(lit_Undef);
+
+      // merge
       pwMerge(sorted1, sorted2, outvars);
     }
     else {
