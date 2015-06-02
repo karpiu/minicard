@@ -24,7 +24,8 @@ enum EncodingType {
     PSN3 = 4,
     PCN3 = 5,
     PAIRWISE = 6,
-    CODISH = 7
+    CODISH = 7,
+    PW_BIT = 8
 };
 
 template <class Solver>
@@ -36,7 +37,8 @@ private:
     bool makeAtMostPairNet(const vector<Lit>& lits, unsigned const k, bool cardnet, vector<Lit>* outvars);
     bool makeAtMostPairwise(const vector<Lit>& lits, const int k);
     bool makeAtMostCodish(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
-    
+    bool makeAtMostPwbit(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
+
     // Produce a sorting network, filling in outvars and constraints with the created output variables and network constraints
     void makeSortNet(vector<Lit>& invars, vector<Lit>& outvars);
     
@@ -47,6 +49,9 @@ private:
     // Siec selekcji Codisha
     bool makeCodish(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k);
     
+    // Nasza siec selekcji
+    bool makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k);
+
     // Pairwise Splitting
     void pwSplit(vector<Lit> const& in, vector<Lit>& out1, vector<Lit>& out2);
     // Pairwise Merging
@@ -55,6 +60,13 @@ private:
     // merger Codisha
     void pwCodishMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars);
     
+    // nasz merger
+    void pwBitMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars);
+    void pwHalfBitMerge(vector<Lit> const& invars,  unsigned const k, vector<Lit>& outvars);
+
+    // bit_split i half_bit_split 
+    void bitSplit(vector<Lit> const& invars, vector<Lit>& outvars, unsigned const begin);
+
     // Produce a comparator, following the "half merging network" construction
     // from Asin, et al. in "Cardinality Network and their Applications"
     // -or- a full 6-clause comparator, depending on encoding type selected.
@@ -120,6 +132,8 @@ bool Encoding<Solver>::makeAtMost(const vector<Lit>& lits, unsigned const k, vec
         return makeAtMostPairwise(lits, k);
     case CODISH:
         return makeAtMostCodish(lits, k, outvars);
+    case PW_BIT:
+        return makeAtMostPwbit(lits, k, outvars);
     default:
         assert(0);
         return false;
@@ -236,6 +250,35 @@ Lit Encoding<Solver>::makeAtMostITE(vector<Lit> lits, unsigned k, map<pair<int,i
 }
 
 template<class Solver>
+bool Encoding<Solver>::makeAtMostPwbit(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars) {
+    // input vars
+    vector<Lit> invars;
+    for (unsigned i = 0 ; i < lits.size() ; i++) {
+        invars.push_back(lits[i]);
+    }
+    
+    //output vars
+    vector<Lit> outvars;
+    
+    makePwbit(invars, outvars, k);
+    
+    for (unsigned i = 0 ; i < outvars.size() ; i++) {
+        if (outvars[i] == lit_Undef)  continue;
+	if (p_outvars) {
+            p_outvars->push_back(outvars[i]);
+        }
+    }
+
+    for (unsigned i = k ; i < outvars.size() ; i++) {
+        S->addClause(~outvars[i]);
+    }
+    
+    // S->addClause(~outvars[k]); ?
+    
+    return true;
+}
+
+template<class Solver>
 bool Encoding<Solver>::makeAtMostCodish(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars) {
     // input vars
     vector<Lit> invars;
@@ -327,7 +370,7 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
 
     vec<Lit> args; // reused
 
-    if (ctype == PSN3 || ctype == PCN3 || ctype == CODISH) {
+    if (ctype == PSN3 || ctype == PCN3 || ctype == CODISH || ctype == PW_BIT) {
         // 3-clause comparator,
         // because AtMosts only need implications from 0 on the outputs to 0 on the inputs
 
@@ -384,6 +427,83 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
         // Already there: args[1] = ~c2;
         S->addClause(args);
    }
+}
+
+template<class Solver>
+bool Encoding<Solver>::makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k) {
+    assert(outvars.empty());
+    if (k == 0) {
+        for (unsigned i = 0 ; i < invars.size() ; i++) {
+            if (invars[i] != lit_Undef) {
+                S->addClause(~invars[i]);
+            }
+        }
+        return true;
+    }
+
+    if (k >= invars.size()) {
+        makeSortNet(invars, outvars);
+        return false;
+    }
+    
+    if (invars.size() == 1) {
+        outvars.push_back(invars[0]);
+        return false;
+    }
+    
+    if (invars.size() == 2) {
+        // make a simple comparator
+        outvars.push_back(lit_Error);
+        outvars.push_back(lit_Error);
+        makeComparator(invars[0], invars[1], outvars[0], outvars[1]);
+        return false;
+    }
+
+    // pad invars to have an even number of literals
+    if (invars.size() % 2 != 0) {
+        invars.push_back(lit_Undef);
+    }
+
+    // split
+    vector<Lit> out1, out2;
+    pwSplit(invars, out1, out2);
+
+    // recursive calls
+    vector<Lit> sorted1, sorted2;
+    makePwbit(out1, sorted1, k);
+    bool allFalse = makePwbit(out2, sorted2, k>>1);
+
+    //maintaining invariant |outvars| >= min(k, |invars|)
+    while (sorted1.size() < k) sorted1.push_back(lit_Undef);
+    
+    // merge
+    if (!allFalse) {
+
+      // making |sorted1| = k
+      // and |sorted2| = k>>1
+      while (sorted1.size() > k) {
+	if (sorted1.back() != lit_Undef) {
+	  S->addClause(~sorted1.back());
+	}
+	sorted1.pop_back();
+      }
+      
+      while (sorted2.size() > (k>>1)) {
+	if (sorted2.back() != lit_Undef) {
+	  S->addClause(~sorted2.back());
+	}
+	sorted2.pop_back();
+      }
+      
+      while (sorted2.size() < (k>>1)) sorted2.push_back(lit_Undef);
+
+      // merge
+      pwBitMerge(sorted1, sorted2, k, outvars);
+    }
+    else {
+        outvars = sorted1;
+    }
+    return false;
 }
 
 template<class Solver>
@@ -588,6 +708,35 @@ void Encoding<Solver>::pwSplit(vector<Lit> const& in, vector<Lit>& out1, vector<
         out2.push_back(lit_Error);
         makeComparator(in[i*2], in[i*2+1], out1[i], out2[i]);
     }
+}
+
+template<class Solver>
+void Encoding<Solver>::pwBitMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars) {
+    assert(in1.size()==k);
+    assert(in2.size()==(k>>1));
+
+    // bit_split
+
+    // pw_hbit_merger
+
+}
+
+template<class Solver>
+void Encoding<Solver>::pwHalfBitMerge(vector<Lit> const& invars,  unsigned const k, vector<Lit>& outvars) {
+    // k==2
+
+    // half_split
+
+    // recursive calls
+    // half_bit_merge left
+
+    // bit_merge right
+ 
+}
+
+template<class Solver>
+void Encoding<Solver>::bitSplit(vector<Lit> const& invars, vector<Lit>& outvars, unsigned const begin) {
+    // make a bitonic splitter that begins splitting at position 'begin'
 }
 
 template<class Solver>
