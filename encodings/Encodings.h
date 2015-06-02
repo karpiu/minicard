@@ -45,12 +45,15 @@ private:
     bool makeCardNet(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k);
 
     // Siec selekcji Codisha
-    void makeCodish(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k);
+    bool makeCodish(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k);
     
     // Pairwise Splitting
     void pwSplit(vector<Lit> const& in, vector<Lit>& out1, vector<Lit>& out2);
     // Pairwise Merging
     void pwMerge(vector<Lit> const& in1, vector<Lit> const& in2, vector<Lit>& outvars);
+
+    // merger Codisha
+    void pwCodishMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars);
     
     // Produce a comparator, following the "half merging network" construction
     // from Asin, et al. in "Cardinality Network and their Applications"
@@ -252,7 +255,11 @@ bool Encoding<Solver>::makeAtMostCodish(const vector<Lit>& lits, unsigned const 
         }
     }
 
-    S->addClause(~outvars[k+1]);
+    for (unsigned i = k ; i < outvars.size() ; i++) {
+        S->addClause(~outvars[i]);
+    }
+    
+    // S->addClause(~outvars[k]); ?
     
     return true;
 }
@@ -380,7 +387,7 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
 }
 
 template<class Solver>
-void Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k) {
+bool Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k) {
     assert(outvars.empty());
     if (k == 0) {
         for (unsigned i = 0 ; i < invars.size() ; i++) {
@@ -407,14 +414,25 @@ void Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, uns
         invars.push_back(lit_Undef);
     }
 
-    // do the complicated stuff
+    // split
     vector<Lit> out1, out2;
     pwSplit(invars, out1, out2);
 
+    // recursive calls
+    vector<Lit> sorted1, sorted2;
+    makeCodish(out1, sorted1, k);
+    bool allFalse = makeCardNet(out2, sorted2, k>>1);
 
-
-
-
+    // merge
+    if (!allFalse) {
+      while (sorted1.size() > k) sorted1.pop_back();
+      while (sorted2.size() > k) sorted2.pop_back();
+      while (sorted2.size() < k) sorted2.push_back(lit_Undef);
+      pwMerge(sorted1, sorted2, outvars);
+    }
+    else {
+        outvars = sorted1;
+    }
     return false;
 }
  
@@ -546,6 +564,48 @@ void Encoding<Solver>::pwSplit(vector<Lit> const& in, vector<Lit>& out1, vector<
     }
 }
 
+template<class Solver>
+void Encoding<Solver>::pwCodishMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars) {
+    /* assert(in1.size()>=k); */
+    /* assert(in2.size()>=k); */
+
+    /* if (k == 1) { */
+    /*     outvars.push_back(in1[0]); */
+    /*     outvars.push_back(in2[0]); */
+    /*     return; */
+    /* } */
+
+    /* vector<Lit> in1odds, in2odds, in1evens, in2evens, tmp1, tmp2; */
+    
+    /* for (unsigned i = 0 ; i < (k+1) / 2 ; i++) { */
+    /*     in1evens.push_back(in1[i*2]); */
+    /*     in2evens.push_back(in2[i*2]); */
+    /*     if (i*2 + 1 < k) { */
+    /*         in1odds.push_back(in1[i*2+1]); */
+    /*         in2odds.push_back(in2[i*2+1]); */
+    /*     } */
+    /*     else { */
+    /*         in1odds.push_back(lit_Undef); */
+    /*         in2odds.push_back(lit_Undef); */
+    /*     } */
+    /* } */
+
+    /* pwCodishMerge(in1evens, in2evens,k, tmp1); */
+    /* pwCodishMerge(in1odds, in2odds,k, tmp2); */
+
+    /* // set outvars[0] = tmp1[0]; */
+    /* outvars.push_back(tmp1[0]); */
+
+    /* for (unsigned i = 0 ; i < k-1 ; i++) { */
+    /*     outvars.push_back(lit_Error); */
+    /*     outvars.push_back(lit_Error); */
+    /*     makeComparator(tmp2[i], tmp1[i+1], outvars[i*2+1], outvars[i*2+2]); */
+    /* } */
+
+    /* // set outvars[2n-1] = tmp2[n-1]; */
+    /* outvars.push_back(tmp2[k-1]); */
+}
+ 
 // Pairwise Merging
 template<class Solver>
 void Encoding<Solver>::pwMerge(vector<Lit> const& in1, vector<Lit> const& in2, vector<Lit>& outvars) {
@@ -594,6 +654,7 @@ void Encoding<Solver>::pwMerge(vector<Lit> const& in1, vector<Lit> const& in2, v
     outvars.push_back(tmp2[n-1]);
 }
 
+ 
 // lits: set of literals in AtMost (set of elements from which subsets are drawn)
 // clause: growing clause (subset of lits)
 // highest: highest index in lits currently added to clause
