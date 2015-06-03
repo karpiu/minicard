@@ -470,7 +470,7 @@ bool Encoding<Solver>::makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsi
     makePwbit(out1, sorted1, k);
     bool allFalse = makePwbit(out2, sorted2, k>>1);
 
-    //maintaining invariant |outvars| >= min(k, |invars|)
+    // maintaining invariant |outvars| >= min(k, |invars|)
     while (sorted1.size() < k) sorted1.push_back(lit_Undef);
     
     // merge
@@ -501,6 +501,124 @@ bool Encoding<Solver>::makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsi
         outvars = sorted1;
     }
     return false;
+}
+
+template<class Solver>
+void Encoding<Solver>::pwBitMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars) {
+    assert(in1.size()==k);
+    assert(in2.size()==(k>>1));
+
+    vector<Lit> out1, out2;
+
+    // bit_split
+    for (unsigned i = 0 ; i < (k>>1) ; i++) {
+      out1.push_back(lit_Error);
+      out2.push_back(lit_Error); // moze nie trzeba tworzyc tych zmiennych?
+      makeComparator(in1[k-(k>>1)+i], in2[(k>>1)-i-1], out1[i], out2[i]);
+    }
+    
+    // to pewnie mozna zapisac ladniej korzystajac z operacji konkatenacji
+    vector<Lit> hbit_in;
+    
+    for(unsigned i = 0 ; i < k-out1.size() ; i++) {
+      hbit_in.push_back(in1[i]);
+    }
+    for(unsigned i = 0 ; i < out1.size() ; i++) {
+      hbit_in.push_back(out1[i]);
+    }
+    
+    // pw_hbit_merger
+    pwHalfBitMerge(hbit_in, k, outvars, true); 
+}
+
+template<class Solver>
+void Encoding<Solver>::pwHalfBitMerge(vector<Lit> const& invars,  unsigned const k, vector<Lit>& outvars, bool const half) {
+    assert(invars.size()==k);
+    if (k == 1) {
+      outvars.push_back(invars[0]);
+      return;
+    }
+
+    vector<Lit> out1, out2;
+    
+    if ( half ) { // use half splitter
+      if ( k==2 ) {
+	outvars.push_back(invars[0]);
+        outvars.push_back(invars[1]);
+        return;
+      }
+
+      vector<Lit> hout1, hout2, in1, in2;
+
+      if(k == 3) {
+	hout1.push_back(lit_Error);
+	hout2.push_back(lit_Error);
+	makeComparator(invars[1], invars[2], hout1[0], hout2[0]);
+      }
+
+      // half split
+      for (unsigned i = 0 ; i < (k>>2) ; i++) {
+	hout1.push_back(lit_Error);
+	hout2.push_back(lit_Error);
+	makeComparator(invars[k-(k>>1)-i-1], invars[k-i-1], hout1[i], hout2[i]);
+      }
+
+      // inputs for recursive calls
+      for (unsigned i = 0 ; i < k-(k>>1)-hout1.size() ; i++ ) {
+	in1.push_back(invars[i]);
+      }
+
+      for (int i = hout1.size()-1 ; i>=0 ; i-- ) {
+	in1.push_back(hout1[i]);
+      }
+
+      for (unsigned i = k-(k>>1) ; i < k-hout2.size() ; i++ ) {
+	in2.push_back(invars[i]);
+      }
+      for (int i = hout2.size()-1 ; i>=0 ; i-- ) {
+	in2.push_back(hout2[i]);
+      }
+      
+      // recursive calls
+      pwHalfBitMerge(in1, in1.size(), out1, true);
+      pwHalfBitMerge(in2, in2.size(), out2, false);
+
+    } else { // use normal splitter
+      if ( k==2 ) {
+	outvars.push_back(lit_Error);
+        outvars.push_back(lit_Error);
+        makeComparator(invars[0], invars[1], outvars[0], outvars[1]);
+	return;
+      }
+
+      vector<Lit> sout1, sout2, in1, in2;
+      
+      // normal split
+      for (unsigned i = 0 ; i < (k>>1) ; i++) {
+	sout1.push_back(lit_Error);
+	sout2.push_back(lit_Error);
+	makeComparator(invars[i], invars[k-(k>>1)+i], sout1[i], sout2[i]);
+      }
+      
+      // inputs for recursive calls
+      for (unsigned i = 0 ; i < sout1.size() ; i++ ) {
+	in1.push_back(sout1[i]);
+      }
+      
+      if (k & 1) { in1.push_back(invars[sout1.size()]); }
+
+      for (unsigned i = 0; i < sout2.size() ; i++ ) {
+	in2.push_back(sout2[i]);
+      }
+      
+      // recursive calls
+      pwHalfBitMerge(in1, in1.size(), out1, false);
+      pwHalfBitMerge(in2, in2.size(), out2, false);
+    }
+
+    // concatenating the results
+    for (unsigned i = 0; i < out1.size(); i++) { outvars.push_back(out1[i]); }
+    for (unsigned i = 0; i < out2.size(); i++) { outvars.push_back(out2[i]); }
 }
 
 template<class Solver>
@@ -705,122 +823,6 @@ void Encoding<Solver>::pwSplit(vector<Lit> const& in, vector<Lit>& out1, vector<
         out2.push_back(lit_Error);
         makeComparator(in[i*2], in[i*2+1], out1[i], out2[i]);
     }
-}
-
-template<class Solver>
-void Encoding<Solver>::pwBitMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars) {
-    assert(in1.size()==k);
-    assert(in2.size()==(k>>1));
-
-    vector<Lit> out1, out2;
-    
-    // bit_split
-    for (unsigned i = 0 ; i < (k>>1) ; i++) {
-      out1.push_back(lit_Error);
-      out2.push_back(lit_Error); // moze nie trzeba tworzyc tych zmiennych?
-      makeComparator(in1[k-(k>>1)+i], in2[(k>>1)-i-1], out1[i], out2[i]);
-    }
-
-    // to pewnie mozna zapisac ladniej korzystajac z operacji konkatenacji
-    vector<Lit> hbit_in;
-    
-    for(unsigned i = 0 ; i < k-out1.size() ; i++) {
-      hbit_in.push_back(in1[i]);
-    }
-    for(unsigned i = 0 ; i < out1.size() ; i++) {
-      hbit_in.push_back(out1[i]);
-    }
-    
-    // pw_hbit_merger
-    pwHalfBitMerge(hbit_in, k, outvars, true); 
-}
-
-template<class Solver>
-void Encoding<Solver>::pwHalfBitMerge(vector<Lit> const& invars,  unsigned const k, vector<Lit>& outvars, bool const half) {
-
-    if (k == 1) {
-      outvars.push_back(invars[0]);
-      return;
-    }
-
-    vector<Lit> out1, out2;
-    
-    if ( half ) { // use half splitter
-      if ( k==2 ) {
-	outvars.push_back(invars[0]);
-        outvars.push_back(invars[1]);
-        return;
-      }
-
-      vector<Lit> hout1, hout2, in1, in2;
-
-      if(k == 3) {
-	hout1.push_back(lit_Error);
-	hout2.push_back(lit_Error);
-	makeComparator(invars[1], invars[2], hout1[0], hout2[0]);
-      }
-      
-      // half split
-      for (unsigned i = 0 ; i < (k>>2) ; i++) {
-	hout1.push_back(lit_Error);
-	hout2.push_back(lit_Error);
-	makeComparator(invars[k-(k>>1)-i-1], invars[k-i-1], hout1[i], hout2[i]);
-      }
-
-      // inputs for recursive calls
-      for (unsigned i = 0 ; i < k-(k>>1)-hout1.size() ; i++ ) {
-	in1.push_back(invars[i]);
-      }
-      for (unsigned i = hout1.size()-1 ; i>=0 ; i-- ) {
-	in1.push_back(hout1[i]);
-      }
-      for (unsigned i = k-(k>>1) ; i < k-hout2.size() ; i++ ) {
-	in2.push_back(invars[i]);
-      }
-      for (unsigned i = hout2.size()-1 ; i>=0 ; i-- ) {
-	in2.push_back(hout2[i]);
-      }
-      
-      // recursive calls
-      pwHalfBitMerge(in1, in1.size(), out1, true);
-      pwHalfBitMerge(in2, in2.size(), out2, false);
-
-    } else { // use normal splitter
-      if ( k==2 ) {
-	outvars.push_back(lit_Error);
-        outvars.push_back(lit_Error);
-        makeComparator(invars[0], invars[1], outvars[0], outvars[1]);
-	return;
-      }
-
-      vector<Lit> sout1, sout2, in1, in2;
-      
-      // normal split
-      for (unsigned i = 0 ; i < (k>>1) ; i++) {
-	sout1.push_back(lit_Error);
-	sout2.push_back(lit_Error);
-	makeComparator(invars[i], invars[k-(k>>1)+i], sout1[i], sout2[i]);
-      }
-      
-      // inputs for recursive calls
-      for (unsigned i = 0 ; i < sout1.size() ; i++ ) {
-	in1.push_back(sout1[i]);
-      }
-      
-      if (k & 1) { in1.push_back(invars[sout1.size()]); }
-
-      for (unsigned i = 0; i < sout2.size() ; i++ ) {
-	in2.push_back(sout2[i]);
-      }
-      
-      // recursive calls
-      pwHalfBitMerge(in1, in1.size(), out1, false);
-      pwHalfBitMerge(in2, in2.size(), out2, false);
-    }
-
-    // concatenating the results
-    for (unsigned i = 0; i < out1.size(); i++) { outvars.push_back(out1[i]); }
-    for (unsigned i = 0; i < out2.size(); i++) { outvars.push_back(out2[i]); }
 }
 
 template<class Solver>
