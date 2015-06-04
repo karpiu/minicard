@@ -36,8 +36,8 @@ private:
     Lit makeAtMostITE(vector<Lit> lits, unsigned k, map<pair<int,int>, Lit>& subexprs);
     bool makeAtMostPairNet(const vector<Lit>& lits, unsigned const k, bool cardnet, vector<Lit>* outvars);
     bool makeAtMostPairwise(const vector<Lit>& lits, const int k);
-    bool makeAtMostCodish(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
-    bool makeAtMostPwbit(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
+    bool makeCodishConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
+    bool makePwbitConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
 
     // Produce a sorting network, filling in outvars and constraints with the created output variables and network constraints
     void makeSortNet(vector<Lit>& invars, vector<Lit>& outvars);
@@ -80,20 +80,83 @@ private:
     // The constraint type (set for every constraint made by this Encoding object)
     EncodingType ctype;
     
+    // The type of 3-clause to use for a single comparator.
+    // if true then: (a => c) ^ (b => c) ^ (a ^ b => d)
+    // if false then: (d => a) ^ (d => b) ^ (c => a v b)
+    bool propagate_ones;
+    
 public:
     
-    Encoding(Solver* _S, EncodingType const _ctype) : S(_S), ctype(_ctype) { }
+    Encoding(Solver* _S, EncodingType const _ctype) : S(_S), ctype(_ctype), propagate_ones(true) { }
     
-    // build an AtMost constraint following the specified type
+    // build an AtMost or AtLeast constraint following the specified type
     // outvars, if not NULL and if ctype is cardinality or sorting network,
     //  will contain the network's "output" variables, which can be used to tighten the constraint later.
     bool makeAtMost(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars = NULL);
+    bool makeAtLeast(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars = NULL);
 };
 
 // Function implementations follow
 
 template<class Solver>
+bool Encoding<Solver>::makeAtLeast(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars = NULL) {
+    // maintain invariant that k<=|lits|/2
+    if( k > lits.size()/2 ) {
+      for ( unsigned i=0 ; i < lits.size() ; i++ ) {
+        lits[i] = ~lits[i];
+      }
+      return makeAtMost(lits, lits.size() - k, outvars);
+    }
+
+    // for encodings other than CODISH and PW_BIT use AtMost constraint no mather the invariant k<=|lits|/2
+    if(ctype != CODISH && ctype != PW_BIT) {
+      for ( unsigned i=0 ; i < lits.size() ; i++ ) {
+        lits[i] = ~lits[i];
+      }
+      return makeAtMost(lits, lits.size() - k, outvars);
+    }
+
+    if (k == 0) {
+        // no bound needed, return a trivial "constraint"
+        return true;
+    }
+
+    if (lits.size() == k) {
+        vec<Lit> args;
+        // ignore the type selected, just conjoin the thruths of the literals
+        for (unsigned i = 0 ; i < lits.size() ; i++) {
+	  args.push(lits[i]); // dziwne, nie powinno sie dodac kazdy literal osobno jako klauzule?
+        }
+        if(!S->addClause(args)) return false;
+        return true;
+    }
+
+    // propagate zeros forward for AtLeast constraint
+    propagate_ones=false;
+
+    switch(ctype) {
+    case CODISH:
+      return makeCodishConstr(lits, k, outvars);
+    case PW_BIT:
+      return makePwbitConstr(lits, k, outvars); 
+    default:
+        assert(0);
+        return false;
+    }
+}
+
+template<class Solver>
 bool Encoding<Solver>::makeAtMost(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars) {
+    // maintain invariant that k<=|lits|/2 if type is CODISH or PW_BIT
+    if(ctype == CODISH || ctype == PW_BIT) {
+      if( k > lits.size()/2 ) {
+	for ( unsigned i=0 ; i < lits.size() ; i++ ) {
+	  lits[i] = ~lits[i];
+	}
+	return makeAtLeast(lits, lits.size() - k, outvars);
+      }
+    }
+    
     if (lits.size() == k) {
         // no bound needed, return a trivial "constraint"
         return true;
@@ -108,6 +171,9 @@ bool Encoding<Solver>::makeAtMost(const vector<Lit>& lits, unsigned const k, vec
         if(!S->addClause(args)) return false;
         return true;
     }
+
+    // propagate ones forward for AtMost constraint
+    propagate_ones=true;
 
     switch(ctype) {
     case ITE:
@@ -128,9 +194,9 @@ bool Encoding<Solver>::makeAtMost(const vector<Lit>& lits, unsigned const k, vec
     case PAIRWISE:
         return makeAtMostPairwise(lits, k);
     case CODISH:
-        return makeAtMostCodish(lits, k, outvars);
+      return makeCodishConstr(lits, k, outvars);
     case PW_BIT:
-        return makeAtMostPwbit(lits, k, outvars);
+      return makePwbitConstr(lits, k, outvars);
     default:
         assert(0);
         return false;
@@ -247,7 +313,7 @@ Lit Encoding<Solver>::makeAtMostITE(vector<Lit> lits, unsigned k, map<pair<int,i
 }
 
 template<class Solver>
-bool Encoding<Solver>::makeAtMostPwbit(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars) {
+bool Encoding<Solver>::makePwbitConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars) {
     // input vars
     vector<Lit> invars;
     for (unsigned i = 0 ; i < lits.size() ; i++) {
@@ -266,17 +332,23 @@ bool Encoding<Solver>::makeAtMostPwbit(const vector<Lit>& lits, unsigned const k
         }
     }
 
-    for (unsigned i = k ; i < outvars.size() ; i++) {
+    if ( propagate_ones ) {
+      // at most
+      for (unsigned i = k ; i < outvars.size() ; i++) {
         S->addClause(~outvars[i]);
+      }
+    } else {
+      // at least
+      for (unsigned i = 0 ; i < k ; i++) { // assuming that k <= |outvars|
+        S->addClause(outvars[i]);
+      }
     }
-    
-    // S->addClause(~outvars[k]); ?
-    
+
     return true;
 }
 
 template<class Solver>
-bool Encoding<Solver>::makeAtMostCodish(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars) {
+bool Encoding<Solver>::makeCodishConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars) {
     // input vars
     vector<Lit> invars;
     for (unsigned i = 0 ; i < lits.size() ; i++) {
@@ -295,12 +367,18 @@ bool Encoding<Solver>::makeAtMostCodish(const vector<Lit>& lits, unsigned const 
         }
     }
 
-    for (unsigned i = k ; i < outvars.size() ; i++) {
+    if ( propagate_ones ) {
+      // at most
+      for (unsigned i = k ; i < outvars.size() ; i++) {
         S->addClause(~outvars[i]);
+      }
+    } else {
+      // at least
+      for (unsigned i = 0 ; i < k ; i++) { // assuming that k <= |outvars|
+        S->addClause(outvars[i]);
+      }
     }
-    
-    // S->addClause(~outvars[k]); ?
-    
+
     return true;
 }
 

@@ -169,6 +169,81 @@ bool Solver::addClause_(vec<Lit>& ps)
     return true;
 }
 
+bool Solver::addAtLeast_(vec<Lit>& ps, int k) {
+  assert(decisionLevel() == 0);
+    if (!ok) return false;
+        
+    // Remove false, already-true, opposite, and duplicate variables
+    sort(ps);
+    Lit p; int i, j;
+    for (i = j = 0, p = lit_Undef; i < ps.size(); i++) {
+        if (value(ps[i]) == l_True) {
+            // Already true: leave it out and decrement the bound
+            k--;
+        }
+        else if (value(ps[i]) == l_False) {
+            // Already false: left out, but bound unchanged
+            continue;
+        }
+        else if (ps[i] == p) {
+            // Duplicate: leave this one out
+            continue;
+        }
+        else if (ps[i] == ~p) {
+            // Opposite literals: leave both out and decrement the bound by one
+            //                    (exactly one of the two will be true)
+            p = ps[i];
+            j--;    // remove the last literal kept
+            k--;
+        }
+        else {
+            // Keep this one.
+            ps[j++] = p = ps[i];
+        }
+    }
+    ps.shrink(i - j);
+
+    // Check if constraint is satisfied
+    if (k <= 0) {
+        return true;
+    }
+
+    // Check if constraint is falsified
+    if (k > ps.size()) {
+        return ok = false;
+    }
+
+    if (detect_clause) {
+        // Check if constraint is actually a clause
+        // and add it as a clause for efficiency
+        if (k == 1) {
+	    //for (i = 0 ; i < ps.size() ; i++) {
+            //      ps[i] = ~ps[i];
+            //  }
+            return addClause_(ps);
+        }
+    }
+
+    // Propagate truth of remaining literals if already at bound
+    if (k == ps.size()) {
+        for (i = 0; i < ps.size(); i++) {
+            uncheckedEnqueue(ps[i]);
+        }
+        return ok = (propagate() == CRef_Undef);
+    }
+
+    // Use an encoding if specified (must be specified)
+    assert(encoding_type != 0);
+
+    // build a vector to pass
+    std::vector<Lit> lits;
+    for(int i = 0;i<ps.size();i++) {
+        lits.push_back(ps[i]);
+    }
+
+    return encoder.makeAtLeast(lits,k);
+}
+
 bool Solver::addAtMost_(vec<Lit>& ps, int k) {
     assert(decisionLevel() == 0);
     if (!ok) return false;

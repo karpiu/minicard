@@ -39,9 +39,9 @@ namespace Minisat {
 // DIMACS Parser:
 
 // readConstr returns :
-//      false if a clause was found
-//      true if an atmost was found
-//      true if an atleast was found (and modifies the constriant to be an atmost)
+//      0 if a clause was found
+//      1 if an atmost was found
+//      2 if an atleast was found
 template<class B, class Solver>
 static int readConstr(B& in, Solver& S, vec<Lit>& lits, int& bound) {
     int     parsed_lit, var;
@@ -56,18 +56,15 @@ static int readConstr(B& in, Solver& S, vec<Lit>& lits, int& bound) {
         var = abs(parsed_lit)-1; 
         lits.push( (parsed_lit > 0) ? mkLit(var) : ~mkLit(var) );
     }
-    return false;
+    return 0;
     
     AtMost:
     bound = parseInt(in);
-    return true;
+    return 1;
     
     AtLeast:
-    bound = lits.size() - parseInt(in);
-    for (int i=0;i<lits.size();i++) {
-        lits[i] = ~lits[i];
-    }
-    return true;
+    bound = parseInt(in);
+    return 2;
 }
 
 template<class B, class Solver>
@@ -100,8 +97,16 @@ static void parse_DIMACS_main(B& in, Solver& S) {
             skipLine(in);
         else {
             cnt++;
-            if(readConstr(in, S, lits, bound)) S.addAtMost_(lits,bound);
-            else S.addClause_(lits);
+            switch(readConstr(in, S, lits, bound)) {
+	    case 0:
+	      S.addClause_(lits); break;
+	    case 1:
+	      S.addAtMost_(lits,bound); break;
+	    case 2:
+	      S.addAtLeast_(lits,bound); break;
+	    default:
+	      S.addClause_(lits);
+	    }
         }
     }
     if (vars != S.nVars())
