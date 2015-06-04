@@ -54,6 +54,10 @@ void printStats(Solver& solver)
     printf("CPU time              : %g s\n", cpu_time);
 }
 
+void printElementaryStats(Solver& solver)
+{
+  printf("%d %d %.2f %g\n", solver.nVars(), solver.nClauses(), memUsedPeak(), cpuTime());
+}
 
 static Solver* solver;
 // Terminate by notifying the solver and back out gracefully. This is mainly to have a test-case
@@ -84,21 +88,23 @@ int main(int argc, char** argv)
 #if defined(__linux__)
         fpu_control_t oldcw, newcw;
         _FPU_GETCW(oldcw); newcw = (oldcw & ~_FPU_EXTENDED) | _FPU_DOUBLE; _FPU_SETCW(newcw);
-        printf("WARNING: for repeatability, setting FPU to use double precision\n");
+        // printf("WARNING: for repeatability, setting FPU to use double precision\n");
 #endif
         // Extra options:
         //
-        IntOption    verb   ("MAIN", "verb",   "Verbosity level (0=silent, 1=some, 2=more).", 1, IntRange(0, 2));
+        IntOption    verb   ("MAIN", "verb",   "Verbosity level (0=silent, 1=some, 2=more, 3=elementary).", 1, IntRange(0, 3));
         IntOption    cpu_lim("MAIN", "cpu-lim","Limit on CPU time allowed in seconds.\n", INT32_MAX, IntRange(0, INT32_MAX));
         IntOption    mem_lim("MAIN", "mem-lim","Limit on memory usage in megabytes.\n", INT32_MAX, IntRange(0, INT32_MAX));
-        
+	IntOption    warn   ("MAIN", "warn", "Show warnings? (0=no, 1=yes)\n", 1, IntRange(0,1));
+
         parseOptions(argc, argv, true);
 
         Solver S;
         double initial_time = cpuTime();
 
         S.verbosity = verb;
-        
+	S.warn = warn;
+
         solver = &S;
         // Use signal handlers that forcibly quit until the solver will be able to respond to
         // interrupts:
@@ -112,7 +118,7 @@ int main(int argc, char** argv)
             if (rl.rlim_max == RLIM_INFINITY || (rlim_t)cpu_lim < rl.rlim_max){
                 rl.rlim_cur = cpu_lim;
                 if (setrlimit(RLIMIT_CPU, &rl) == -1)
-                    printf("WARNING! Could not set resource limit: CPU-time.\n");
+                  if (warn)  printf("WARNING! Could not set resource limit: CPU-time.\n");
             } }
 
         // Set limit on virtual memory:
@@ -123,7 +129,7 @@ int main(int argc, char** argv)
             if (rl.rlim_max == RLIM_INFINITY || new_mem_lim < rl.rlim_max){
                 rl.rlim_cur = new_mem_lim;
                 if (setrlimit(RLIMIT_AS, &rl) == -1)
-                    printf("WARNING! Could not set resource limit: Virtual memory.\n");
+		  if (warn) printf("WARNING! Could not set resource limit: Virtual memory.\n");
             } }
         
         if (argc == 1)
@@ -133,7 +139,7 @@ int main(int argc, char** argv)
         if (in == NULL)
             printf("ERROR! Could not open file: %s\n", argc == 1 ? "<stdin>" : argv[1]), exit(1);
         
-        if (S.verbosity > 0){
+        if (S.verbosity > 0 && S.verbosity < 3){
             printf("============================[ Problem Statistics ]=============================\n");
             printf("|                                                                             |\n"); }
         
@@ -141,12 +147,12 @@ int main(int argc, char** argv)
         gzclose(in);
         FILE* res = (argc >= 3) ? fopen(argv[2], "wb") : NULL;
         
-        if (S.verbosity > 0){
+        if (S.verbosity > 0 && S.verbosity < 3){
             printf("|  Number of variables:  %12d                                         |\n", S.nVars());
             printf("|  Number of clauses:    %12d                                         |\n", S.nClauses()); }
         
         double parsed_time = cpuTime();
-        if (S.verbosity > 0){
+        if (S.verbosity > 0 && S.verbosity < 3){
             printf("|  Parse time:           %12.2f s                                       |\n", parsed_time - initial_time);
             printf("|                                                                             |\n"); }
  
@@ -157,20 +163,22 @@ int main(int argc, char** argv)
        
         if (!S.simplify()){
             if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
-            if (S.verbosity > 0){
+            if (S.verbosity > 0 && S.verbosity < 3){
                 printf("===============================================================================\n");
                 printf("Solved by unit propagation\n");
                 printStats(S);
                 printf("\n"); }
+	    if (S.verbosity == 3) printElementaryStats(S);
             printf("UNSATISFIABLE\n");
             exit(20);
         }
         
         vec<Lit> dummy;
         lbool ret = S.solveLimited(dummy);
-        if (S.verbosity > 0){
+        if (S.verbosity > 0 && S.verbosity < 3){
             printStats(S);
             printf("\n"); }
+	if (S.verbosity == 3) printElementaryStats(S);
         printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
         if (res != NULL){
             if (ret == l_True){

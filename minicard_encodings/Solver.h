@@ -128,6 +128,7 @@ public:
     // Mode of operation:
     //
     int       verbosity;
+    int       warn;
     double    var_decay;
     double    clause_decay;
     double    random_var_freq;

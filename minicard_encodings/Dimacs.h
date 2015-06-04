@@ -110,9 +110,9 @@ static void parse_DIMACS_main(B& in, Solver& S) {
         }
     }
     if (vars != S.nVars())
-        fprintf(stderr, "WARNING! DIMACS header mismatch: wrong number of variables.\n");
+      if(S.warn) fprintf(stderr, "WARNING! DIMACS header mismatch: wrong number of variables.\n");
     if (cnt  != constr)
-        fprintf(stderr, "WARNING! DIMACS header mismatch: wrong number of constraints.\n");
+      if(S.warn) fprintf(stderr, "WARNING! DIMACS header mismatch: wrong number of constraints.\n");
 }
 
 // Inserts problem into solver.

@@ -61,6 +61,7 @@ Solver::Solver() :
     // Parameters (user settable):
     //
     verbosity        (0)
+  , warn             (1)
   , var_decay        (opt_var_decay)
   , clause_decay     (opt_clause_decay)
   , random_var_freq  (opt_random_var_freq)
@@ -809,7 +810,7 @@ lbool Solver::search(int nof_conflicts)
                 learntsize_adjust_cnt    = (int)learntsize_adjust_confl;
                 max_learnts             *= learntsize_inc;
 
-                if (verbosity >= 1)
+                if (verbosity >= 1 && verbosity < 3)
                     printf("| %9d | %7d %8d %8d | %8d %8d %6.0f | %6.3f %% |\n", 
                            (int)conflicts, 
                            (int)dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]), nClauses(), (int)clauses_literals, 
@@ -922,7 +923,7 @@ lbool Solver::solve_()
     learntsize_adjust_cnt     = (int)learntsize_adjust_confl;
     lbool   status            = l_Undef;
 
-    if (verbosity >= 1){
+    if (verbosity >= 1 && verbosity < 3){
         printf("============================[ Search Statistics ]==============================\n");
         printf("| Conflicts |          ORIGINAL         |          LEARNT          | Progress |\n");
         printf("|           |    Vars  Clauses Literals |    Limit  Clauses Lit/Cl |          |\n");
@@ -938,7 +939,7 @@ lbool Solver::solve_()
         curr_restarts++;
     }
 
-    if (verbosity >= 1)
+    if (verbosity >= 1 && verbosity < 3)
         printf("===============================================================================\n");
 
 
@@ -1026,7 +1027,7 @@ void Solver::toDimacs(FILE* f, const vec<Lit>& assumps)
     for (int i = 0; i < clauses.size(); i++)
         toDimacs(f, ca[clauses[i]], map, max);
 
-    if (verbosity > 0)
+    if (verbosity > 0 && verbosity < 3)
         printf("Wrote %d clauses with %d variables.\n", cnt, max);
 }
 
@@ -1077,7 +1078,7 @@ void Solver::garbageCollect()
     ClauseAllocator to(ca.size() - ca.wasted()); 
 
     relocAll(to);
-    if (verbosity >= 2)
+    if (verbosity == 2)
         printf("|  Garbage collection:   %12d bytes => %12d bytes             |\n", 
                ca.size()*ClauseAllocator::Unit_Size, to.size()*ClauseAllocator::Unit_Size);
     to.moveTo(ca);
