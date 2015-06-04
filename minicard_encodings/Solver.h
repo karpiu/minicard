@@ -64,7 +64,9 @@ public:
     bool    addAtMost (const vec<Lit>& ps, int k);         // Add an AtMost cardinality constraint: SUM(ps) <= k
     bool    addAtMost_(      vec<Lit>& ps, int k);         // Add an AtMost cardinality constraint to the solver without making superflous internal copy.
                                                                 // change the passed vector 'ps'.
-
+    bool    addAtLeast (const vec<Lit>& ps, int k);
+    bool    addAtLeast_(      vec<Lit>& ps, int k);
+    
     // Solving:
     //
     bool    simplify     ();                        // Removes already satisfied clauses.
@@ -333,6 +335,7 @@ inline bool     Solver::addClause       (Lit p)                 { add_tmp.clear(
 inline bool     Solver::addClause       (Lit p, Lit q)          { add_tmp.clear(); add_tmp.push(p); add_tmp.push(q); return addClause_(add_tmp); }
 inline bool     Solver::addClause       (Lit p, Lit q, Lit r)   { add_tmp.clear(); add_tmp.push(p); add_tmp.push(q); add_tmp.push(r); return addClause_(add_tmp); }
 inline bool     Solver::addAtMost       (const vec<Lit>& ps, int k)  { ps.copyTo(add_tmp); return addAtMost_(add_tmp, k); }
+inline bool     Solver::addAtLeast      (const vec<Lit>& ps, int k)  { ps.copyTo(add_tmp); return addAtLeast_(add_tmp, k); }
 inline bool     Solver::locked          (const Clause& c) const { return value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && ca.lea(reason(var(c[0]))) == &c; }
 inline void     Solver::newDecisionLevel()                      { trail_lim.push(trail.size()); }
 

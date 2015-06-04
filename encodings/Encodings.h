@@ -92,14 +92,14 @@ public:
     // build an AtMost or AtLeast constraint following the specified type
     // outvars, if not NULL and if ctype is cardinality or sorting network,
     //  will contain the network's "output" variables, which can be used to tighten the constraint later.
-    bool makeAtMost(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars = NULL);
-    bool makeAtLeast(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars = NULL);
+    bool makeAtMost(vector<Lit>& lits, unsigned const k, vector<Lit>* outvars = NULL);
+    bool makeAtLeast(vector<Lit>& lits, unsigned const k, vector<Lit>* outvars = NULL);
 };
 
 // Function implementations follow
 
 template<class Solver>
-bool Encoding<Solver>::makeAtLeast(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars = NULL) {
+bool Encoding<Solver>::makeAtLeast(vector<Lit>& lits, unsigned const k, vector<Lit>* outvars) {
     // maintain invariant that k<=|lits|/2
     if( k > lits.size()/2 ) {
       for ( unsigned i=0 ; i < lits.size() ; i++ ) {
@@ -146,7 +146,7 @@ bool Encoding<Solver>::makeAtLeast(const vector<Lit>& lits, unsigned const k, ve
 }
 
 template<class Solver>
-bool Encoding<Solver>::makeAtMost(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars) {
+bool Encoding<Solver>::makeAtMost(vector<Lit>& lits, unsigned const k, vector<Lit>* outvars) {
     // maintain invariant that k<=|lits|/2 if type is CODISH or PW_BIT
     if(ctype == CODISH || ctype == PW_BIT) {
       if( k > lits.size()/2 ) {
@@ -448,7 +448,9 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
     if (ctype == PSN3 || ctype == PCN3 || ctype == CODISH || ctype == PW_BIT) {
         // 3-clause comparator,
         // because AtMosts only need implications from 0 on the outputs to 0 on the inputs
+        // and AtLeasts other way around
 
+      if( propagate_ones ) {
         // a -> c1
         args.push(~a);
         args.push(c1);
@@ -464,6 +466,23 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
         args[1] = ~b;
         args.push(c2);
         S->addClause(args);
+      } else {
+	// c2 -> a
+	args.push(~c2);
+        args.push(a);
+        S->addClause(args);
+
+	// c2 -> b
+	// Already there: args[0] = ~c2;
+	args[1] = b;
+	S->addClause(args);
+
+	// c1 -> a v b
+	args[0] = a;
+        args[1] = b;
+        args.push(~c1);
+        S->addClause(args);
+      }
     }
     else {
         // full 6-clause comparator
