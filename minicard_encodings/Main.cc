@@ -169,7 +169,7 @@ int main(int argc, char** argv)
                 printStats(S);
                 printf("\n"); }
 	    if (S.verbosity == 3) printElementaryStats(S);
-            printf("UNSATISFIABLE\n");
+            else printf("UNSATISFIABLE\n");
             exit(20);
         }
         
@@ -179,7 +179,7 @@ int main(int argc, char** argv)
             printStats(S);
             printf("\n"); }
 	if (S.verbosity == 3) printElementaryStats(S);
-        printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
+        else printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
         if (res != NULL){
             if (ret == l_True){
                 fprintf(res, "SAT\n");
