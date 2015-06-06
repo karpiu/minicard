@@ -29,5 +29,5 @@ then
 fi
 
 for file in $(find $1 -maxdepth 1 -type f); do
-    echo "Running $file"
+    ../minicard_encodings/minicard_encodings_static -warn=0 -verb=3 -encode-type=$2 $file
 done
