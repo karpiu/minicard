@@ -1,1 +1,4 @@
 *.pdf
+in*
+codish_data
+pwbit_data

@@ -7,6 +7,6 @@ set style line 2 lt 1 pt 6 lc rgb "blue" lw 1
 set style line 3 lt 1 pt 5 lc rgb "green" lw 1
 set logscale x 2
 set xrange [64:6000]
-set yrange [1:10000]
-plot 'codish_data' using 1:2 smooth unique title 'codish' with linespoints ls 1, \
-     'pwbit_data' using 1:2 smooth unique title 'pw_bit' with linespoints ls 2
+set yrange [0:1]
+plot 'codish_data' using 1:5 title 'codish' with linespoints ls 1, \
+     'pwbit_data' using 1:5 title 'pw_bit' with linespoints ls 2

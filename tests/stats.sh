@@ -7,7 +7,7 @@
 #      a test file is either plain or gziped DIMACS file (CNF or CNF+)
 # $2 : encoding type (currently number from 1 to 8;
 #      check ../encodings/Encodings.h for list of all encoding types)
-# $3 : number of variables for each test in the given directory
+# $3 : number of cardinality constraints for each test in the given directory
 
 types="1 2 3 4 5 6 7 8"
 
