@@ -96,6 +96,7 @@ int main(int argc, char** argv)
         IntOption    cpu_lim("MAIN", "cpu-lim","Limit on CPU time allowed in seconds.\n", INT32_MAX, IntRange(0, INT32_MAX));
         IntOption    mem_lim("MAIN", "mem-lim","Limit on memory usage in megabytes.\n", INT32_MAX, IntRange(0, INT32_MAX));
 	IntOption    warn   ("MAIN", "warn", "Show warnings? (0=no, 1=yes)\n", 1, IntRange(0,1));
+	IntOption    convert("MAIN", "convert-to", "If > 0, then output converted CNF+ in other format (1=cnf)", 0, IntRange(0,1));
 
         parseOptions(argc, argv, true);
 
@@ -138,7 +139,14 @@ int main(int argc, char** argv)
         gzFile in = (argc == 1) ? gzdopen(0, "rb") : gzopen(argv[1], "rb");
         if (in == NULL)
             printf("ERROR! Could not open file: %s\n", argc == 1 ? "<stdin>" : argv[1]), exit(1);
-        
+
+	if (convert) {
+	  parse_DIMACS(in, S);
+	  gzclose(in);
+	  S.outputCNF();
+	  exit(0);
+	}
+	
         if (S.verbosity > 0 && S.verbosity < 3){
             printf("============================[ Problem Statistics ]=============================\n");
             printf("|                                                                             |\n"); }

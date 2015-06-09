@@ -959,6 +959,11 @@ lbool Solver::solve_()
 // 
 // FIXME: this needs to be rewritten completely.
 
+void Solver::outputCNF() {
+  vec<Lit> assumps;
+  toDimacs(stdout, assumps);
+}
+
 static Var mapVar(Var x, vec<Var>& map, Var& max)
 {
     if (map.size() <= x || map[x] == -1){
