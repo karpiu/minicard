@@ -319,6 +319,12 @@ bool Encoding<Solver>::makePwbitConstr(const vector<Lit>& lits, unsigned const k
     for (unsigned i = 0 ; i < lits.size() ; i++) {
         invars.push_back(lits[i]);
     }
+
+    int z = __builtin_clz(lits.size()); // number of leading zeros
+    
+    for (unsigned i = lits.size() ; i < (1<<(32-z)) ; i++) {
+      invars.push_back(lit_Undef);
+    }
     
     //output vars
     vector<Lit> outvars;
