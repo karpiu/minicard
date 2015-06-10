@@ -54,9 +54,9 @@ void printStats(Solver& solver)
     printf("CPU time              : %g s\n", cpu_time);
 }
 
-void printElementaryStats(Solver& solver)
+void printElementaryStats(Solver& solver, int result)
 {
-  printf("%d %d %.2f %g\n", solver.nVars(), solver.nClauses(), memUsedPeak(), cpuTime());
+  printf("%d %d %.2f %g %d\n", solver.nVars(), solver.nClauses(), memUsedPeak(), cpuTime(), result);
 }
 
 static Solver* solver;
@@ -176,7 +176,7 @@ int main(int argc, char** argv)
                 printf("Solved by unit propagation\n");
                 printStats(S);
                 printf("\n"); }
-	    if (S.verbosity == 3) printElementaryStats(S);
+	    if (S.verbosity == 3) printElementaryStats(S,0);
             else printf("UNSATISFIABLE\n");
             exit(20);
         }
@@ -186,7 +186,7 @@ int main(int argc, char** argv)
         if (S.verbosity > 0 && S.verbosity < 3){
             printStats(S);
             printf("\n"); }
-	if (S.verbosity == 3) printElementaryStats(S);
+	if (S.verbosity == 3) printElementaryStats(S, ret == l_True ? 1 : ret == l_False ? 0 : 2);
         else printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
         if (res != NULL){
             if (ret == l_True){
@@ -208,8 +208,10 @@ int main(int argc, char** argv)
         return (ret == l_True ? 10 : ret == l_False ? 20 : 0);
 #endif
     } catch (OutOfMemoryException&){
-        printf("===============================================================================\n");
-        printf("INDETERMINATE\n");
-        exit(0);
+        //printf("===============================================================================\n");
+        //printf("INDETERMINATE\n");
+      //if(S.verbosity == 3) printElementaryStats(S,2);
+      printf("-1 -1 -1 -1 2\n");
+      exit(0);
     }
 }
