@@ -61,7 +61,7 @@ private:
     void pwCodishMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars);
     
     // nasz merger
-    void pwBitMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars);
+    void pwBitMerge(vector<Lit> & in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars);
     void pwHalfBitMerge(vector<Lit> const& invars,  unsigned const k, vector<Lit>& outvars, bool const half);
 
     // Produce a comparator, following the "half merging network" construction
@@ -607,34 +607,32 @@ bool Encoding<Solver>::makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsi
 }
 
 template<class Solver>
-void Encoding<Solver>::pwBitMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars) {
+void Encoding<Solver>::pwBitMerge(vector<Lit> & in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars) {
     assert(in1.size()==k);
     assert(in2.size()==(k>>1));
 
-    vector<Lit> in1_c(in1);
-    
     int z = __builtin_clz(k); // number of leading zeros
     
     for (unsigned i = k ; i < (1<<(32-z)) ; i++) {
-      in1_c.push_back(lit_Undef);
+      in1.push_back(lit_Undef);
     }
 
     vector<Lit> out1, out2;
 
-    int K = in1_c.size();
+    int K = in1.size();
     
     // bit_split
     for (unsigned i = 0 ; i < (k>>1) ; i++) {
       out1.push_back(lit_Error);
       out2.push_back(lit_Error);
-      makeComparator(in1_c[K-(k>>1)+i], in2[(k>>1)-i-1], out1[i], out2[i]);
+      makeComparator(in1[K-(k>>1)+i], in2[(k>>1)-i-1], out1[i], out2[i]);
     }
     
     // to pewnie mozna zapisac ladniej korzystajac z operacji konkatenacji
     vector<Lit> hbit_in;
     
     for(unsigned i = 0 ; i < K-out1.size() ; i++) {
-      hbit_in.push_back(in1_c[i]);
+      hbit_in.push_back(in1[i]);
     }
     for(unsigned i = 0 ; i < out1.size() ; i++) {
       hbit_in.push_back(out1[i]);
