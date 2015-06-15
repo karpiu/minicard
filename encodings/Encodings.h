@@ -432,7 +432,6 @@ bool Encoding<Solver>::makeAtMostPairNet(const vector<Lit>& lits, unsigned const
 template<class Solver>
 inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1, Lit& c2) {
     // if one of our inputs is a constant false, we can simplify greatly
-  if ( propagate_ones ) {
     if (a == lit_Undef) {
         c1 = b;
         c2 = a;
@@ -443,18 +442,6 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
         c2 = b;
         return;
     } 
-  } else {
-    if (a == lit_Undef) {
-        c1 = a;
-        c2 = b;
-        return;
-    }
-    if (b == lit_Undef) {
-        c1 = b;
-        c2 = a;
-        return;
-    }
-  }
 
     // otherwise, we need new variables
     S->newVar();
