@@ -534,7 +534,7 @@ bool Encoding<Solver>::makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsi
     assert(outvars.empty());
     if (k == 0) {
         for (unsigned i = 0 ; i < invars.size() ; i++) {
-            if (invars[i] != lit_Undef) {
+	  if ((invars[i] != lit_Undef) && propagate_ones) {
                 S->addClause(~invars[i]);
             }
         }
@@ -571,18 +571,18 @@ bool Encoding<Solver>::makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsi
     // recursive calls
     vector<Lit> sorted1, sorted2;
     makePwbit(out1, sorted1, k);
-    bool allFalse = makePwbit(out2, sorted2, k>>1);
+    makePwbit(out2, sorted2, k>>1);
 
     // maintaining invariant |outvars| >= min(k, |invars|)
     while (sorted1.size() < k) sorted1.push_back(lit_Undef);
     
     // merge
-    if (!allFalse) {
+    if (k>1) {
 
       // making |sorted1| = k
       // and |sorted2| = k>>1
       while (sorted1.size() > k) {
-	if (sorted1.back() != lit_Undef) {
+	if ((sorted1.back() != lit_Undef) && propagate_ones) {
 	  S->addClause(~sorted1.back());
 	}
 	sorted1.pop_back();
@@ -611,20 +611,30 @@ void Encoding<Solver>::pwBitMerge(vector<Lit> const& in1, vector<Lit> const& in2
     assert(in1.size()==k);
     assert(in2.size()==(k>>1));
 
+    vector<Lit> in1_c(in1);
+    
+    int z = __builtin_clz(k); // number of leading zeros
+    
+    for (unsigned i = k ; i < (1<<(32-z)) ; i++) {
+      in1_c.push_back(lit_Undef);
+    }
+
     vector<Lit> out1, out2;
 
+    int K = in1_c.size();
+    
     // bit_split
     for (unsigned i = 0 ; i < (k>>1) ; i++) {
       out1.push_back(lit_Error);
-      out2.push_back(lit_Error); // moze nie trzeba tworzyc tych zmiennych?
-      makeComparator(in1[k-(k>>1)+i], in2[(k>>1)-i-1], out1[i], out2[i]);
+      out2.push_back(lit_Error);
+      makeComparator(in1_c[K-(k>>1)+i], in2[(k>>1)-i-1], out1[i], out2[i]);
     }
     
     // to pewnie mozna zapisac ladniej korzystajac z operacji konkatenacji
     vector<Lit> hbit_in;
     
-    for(unsigned i = 0 ; i < k-out1.size() ; i++) {
-      hbit_in.push_back(in1[i]);
+    for(unsigned i = 0 ; i < K-out1.size() ; i++) {
+      hbit_in.push_back(in1_c[i]);
     }
     for(unsigned i = 0 ; i < out1.size() ; i++) {
       hbit_in.push_back(out1[i]);
@@ -637,6 +647,8 @@ void Encoding<Solver>::pwBitMerge(vector<Lit> const& in1, vector<Lit> const& in2
 template<class Solver>
 void Encoding<Solver>::pwHalfBitMerge(vector<Lit> const& invars,  unsigned const k, vector<Lit>& outvars, bool const half) {
     assert(invars.size()==k);
+    // invariant: k is a power of 2
+
     if (k == 1) {
       outvars.push_back(invars[0]);
       return;
@@ -652,12 +664,6 @@ void Encoding<Solver>::pwHalfBitMerge(vector<Lit> const& invars,  unsigned const
       }
 
       vector<Lit> hout1, hout2, in1, in2;
-
-      if(k == 3) {
-	hout1.push_back(lit_Error);
-	hout2.push_back(lit_Error);
-	makeComparator(invars[1], invars[2], hout1[0], hout2[0]);
-      }
 
       // half split
       for (unsigned i = 0 ; i < (k>>2) ; i++) {
@@ -708,8 +714,6 @@ void Encoding<Solver>::pwHalfBitMerge(vector<Lit> const& invars,  unsigned const
 	in1.push_back(sout1[i]);
       }
       
-      if (k & 1) { in1.push_back(invars[sout1.size()]); }
-
       for (unsigned i = 0; i < sout2.size() ; i++ ) {
 	in2.push_back(sout2[i]);
       }
@@ -729,7 +733,7 @@ bool Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, uns
     assert(outvars.empty());
     if (k == 0) {
         for (unsigned i = 0 ; i < invars.size() ; i++) {
-            if (invars[i] != lit_Undef) {
+	  if ((invars[i] != lit_Undef) && propagate_ones) {
                 S->addClause(~invars[i]);
             }
         }
@@ -776,7 +780,7 @@ bool Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, uns
 
       // making |sorted1|=|sorted2|=k
       while (sorted1.size() > k) {
-	if (sorted1.back() != lit_Undef) {
+	if ((sorted1.back() != lit_Undef) && propagate_ones) {
 	  S->addClause(~sorted1.back());
 	}
 	sorted1.pop_back();
