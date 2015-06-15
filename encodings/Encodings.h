@@ -639,9 +639,11 @@ void Encoding<Solver>::pwBitMerge(vector<Lit> const& in1, vector<Lit> const& in2
     for(unsigned i = 0 ; i < out1.size() ; i++) {
       hbit_in.push_back(out1[i]);
     }
+
+    if(propagate_ones) for(unsigned i=0 ; i < out2.size() ; i++) S->addClause(~out2[i]);
     
     // pw_hbit_merger
-    pwHalfBitMerge(hbit_in, k, outvars, true); 
+    pwHalfBitMerge(hbit_in, K, outvars, true); 
 }
 
 template<class Solver>
