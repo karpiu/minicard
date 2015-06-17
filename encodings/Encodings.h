@@ -84,6 +84,17 @@ private:
     // if true then: (a => c) ^ (b => c) ^ (a ^ b => d)
     // if false then: (d => a) ^ (d => b) ^ (c => a v b)
     bool propagate_ones;
+
+    inline unsigned pow2roundup (unsigned x) {
+      if(x == 0) return 0;
+      --x;
+      x |= x >> 1;
+      x |= x >> 2;
+      x |= x >> 4;
+      x |= x >> 8;
+      x |= x >> 16;
+      return x+1;
+    }
     
 public:
     
@@ -116,21 +127,6 @@ bool Encoding<Solver>::makeAtLeast(vector<Lit>& lits, unsigned const k, vector<L
       return makeAtMost(lits, lits.size() - k, outvars);
     }
 
-    if (k == 0) {
-        // no bound needed, return a trivial "constraint"
-        return true;
-    }
-
-    if (lits.size() == k) {
-        vec<Lit> args;
-        // ignore the type selected, just conjoin the thruths of the literals
-        for (unsigned i = 0 ; i < lits.size() ; i++) {
-	  args.push(lits[i]); // dziwne, nie powinno sie dodac kazdy literal osobno jako klauzule?
-        }
-        if(!S->addClause(args)) return false;
-        return true;
-    }
-
     // propagate zeros forward for AtLeast constraint
     propagate_ones=false;
 
@@ -155,21 +151,6 @@ bool Encoding<Solver>::makeAtMost(vector<Lit>& lits, unsigned const k, vector<Li
 	}
 	return makeAtLeast(lits, lits.size() - k, outvars);
       }
-    }
-    
-    if (lits.size() == k) {
-        // no bound needed, return a trivial "constraint"
-        return true;
-    }
-
-    if (k == 0) {
-        vec<Lit> args;
-        // ignore the type selected, just conjoin the negations of the literals
-        for (unsigned i = 0 ; i < lits.size() ; i++) {
-            args.push(~lits[i]);
-        }
-        if(!S->addClause(args)) return false;
-        return true;
     }
 
     // propagate ones forward for AtMost constraint
@@ -320,9 +301,7 @@ bool Encoding<Solver>::makePwbitConstr(const vector<Lit>& lits, unsigned const k
         invars.push_back(lits[i]);
     }
 
-    int z = __builtin_clz(lits.size()); // number of leading zeros
-    
-    for (unsigned i = lits.size() ; i < (1<<(32-z)) ; i++) {
+    for (unsigned i = lits.size() ; i < pow2roundup(lits.size()) ; i++) {
       invars.push_back(lit_Undef);
     }
     
@@ -341,11 +320,13 @@ bool Encoding<Solver>::makePwbitConstr(const vector<Lit>& lits, unsigned const k
     if ( propagate_ones ) {
       // at most
       for (unsigned i = k ; i < outvars.size() ; i++) {
+	if(outvars[i] == lit_Undef) continue;
         S->addClause(~outvars[i]);
       }
     } else {
       // at least
       for (unsigned i = 0 ; i < k ; i++) { // assuming that k <= |outvars|
+	if(outvars[i] == lit_Undef) continue;
         S->addClause(outvars[i]);
       }
     }
@@ -376,11 +357,13 @@ bool Encoding<Solver>::makeCodishConstr(const vector<Lit>& lits, unsigned const 
     if ( propagate_ones ) {
       // at most
       for (unsigned i = k ; i < outvars.size() ; i++) {
+	if(outvars[i] == lit_Undef) continue;
         S->addClause(~outvars[i]);
       }
     } else {
       // at least
       for (unsigned i = 0 ; i < k ; i++) { // assuming that k <= |outvars|
+	if(outvars[i] == lit_Undef) continue;
         S->addClause(outvars[i]);
       }
     }
@@ -559,11 +542,6 @@ bool Encoding<Solver>::makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsi
         return false;
     }
 
-    // pad invars to have an even number of literals
-    if (invars.size() % 2 != 0) {
-        invars.push_back(lit_Undef);
-    }
-
     // split
     vector<Lit> out1, out2;
     pwSplit(invars, out1, out2);
@@ -589,7 +567,7 @@ bool Encoding<Solver>::makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsi
       }
       
       while (sorted2.size() > (k>>1)) {
-	if (sorted2.back() != lit_Undef) {
+	if ((sorted2.back() != lit_Undef) && propagate_ones) {
 	  S->addClause(~sorted2.back());
 	}
 	sorted2.pop_back();
@@ -611,9 +589,7 @@ void Encoding<Solver>::pwBitMerge(vector<Lit> & in1, vector<Lit> const& in2, uns
     assert(in1.size()==k);
     assert(in2.size()==(k>>1));
 
-    int z = __builtin_clz(k); // number of leading zeros
-    
-    for (unsigned i = k ; i < (1<<(32-z)) ; i++) {
+    for (unsigned i = k ; i < pow2roundup(k) ; i++) {
       in1.push_back(lit_Undef);
     }
 
@@ -638,8 +614,13 @@ void Encoding<Solver>::pwBitMerge(vector<Lit> & in1, vector<Lit> const& in2, uns
       hbit_in.push_back(out1[i]);
     }
 
-    if(propagate_ones) for(unsigned i=0 ; i < out2.size() ; i++) S->addClause(~out2[i]);
-    
+    if(propagate_ones) {
+      for(unsigned i=0 ; i < out2.size() ; i++) {
+	if(out2[i] == lit_Undef) continue;
+	S->addClause(~out2[i]);
+      }
+    }
+      
     // pw_hbit_merger
     pwHalfBitMerge(hbit_in, K, outvars, true); 
 }
@@ -666,14 +647,14 @@ void Encoding<Solver>::pwHalfBitMerge(vector<Lit> const& invars,  unsigned const
       vector<Lit> hout1, hout2, in1, in2;
 
       // half split
-      for (unsigned i = 0 ; i < (k>>2) ; i++) {
+      for (unsigned i = 0 ; i < k/4 ; i++) {
 	hout1.push_back(lit_Error);
 	hout2.push_back(lit_Error);
-	makeComparator(invars[k-(k>>1)-i-1], invars[k-i-1], hout1[i], hout2[i]);
+	makeComparator(invars[k/2-i-1], invars[k-i-1], hout1[i], hout2[i]);
       }
 
       // inputs for recursive calls
-      for (unsigned i = 0 ; i < k-(k>>1)-hout1.size() ; i++ ) {
+      for (unsigned i = 0 ; i < k/4 ; i++ ) {
 	in1.push_back(invars[i]);
       }
 
@@ -681,7 +662,7 @@ void Encoding<Solver>::pwHalfBitMerge(vector<Lit> const& invars,  unsigned const
 	in1.push_back(hout1[i]);
       }
 
-      for (unsigned i = k-(k>>1) ; i < k-hout2.size() ; i++ ) {
+      for (unsigned i = k/2 ; i < k-hout2.size() ; i++ ) {
 	in2.push_back(invars[i]);
       }
       for (int i = hout2.size()-1 ; i>=0 ; i-- ) {
@@ -703,24 +684,15 @@ void Encoding<Solver>::pwHalfBitMerge(vector<Lit> const& invars,  unsigned const
       vector<Lit> sout1, sout2, in1, in2;
       
       // normal split
-      for (unsigned i = 0 ; i < (k>>1) ; i++) {
+      for (unsigned i = 0 ; i < k/2 ; i++) {
 	sout1.push_back(lit_Error);
 	sout2.push_back(lit_Error);
-	makeComparator(invars[i], invars[k-(k>>1)+i], sout1[i], sout2[i]);
-      }
-      
-      // inputs for recursive calls
-      for (unsigned i = 0 ; i < sout1.size() ; i++ ) {
-	in1.push_back(sout1[i]);
-      }
-      
-      for (unsigned i = 0; i < sout2.size() ; i++ ) {
-	in2.push_back(sout2[i]);
+	makeComparator(invars[i], invars[k/2+i], sout1[i], sout2[i]);
       }
       
       // recursive calls
-      pwHalfBitMerge(in1, in1.size(), out1, false);
-      pwHalfBitMerge(in2, in2.size(), out2, false);
+      pwHalfBitMerge(sout1, sout1.size(), out1, false);
+      pwHalfBitMerge(sout2, sout2.size(), out2, false);
     }
 
     // concatenating the results
