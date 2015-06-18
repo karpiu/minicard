@@ -759,7 +759,7 @@ bool Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, uns
       }
       
       while (sorted2.size() > k) {
-	if (sorted2.back() != lit_Undef) {
+	if ((sorted2.back() != lit_Undef) && propagate_ones) {
 	  S->addClause(~sorted2.back());
 	}
 	sorted2.pop_back();
