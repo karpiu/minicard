@@ -25,7 +25,8 @@ enum EncodingType {
     PCN3 = 5,
     PAIRWISE = 6,
     CODISH = 7,
-    PW_BIT = 8
+    PW_BIT = 8,
+    PW_SEL = 9
 };
 
 template <class Solver>
@@ -60,9 +61,10 @@ private:
     // merger Codisha
     void pwCodishMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars);
     
-    // nasz merger
+    // our mergers
     void pwBitMerge(vector<Lit> & in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars);
     void pwHalfBitMerge(vector<Lit> const& invars,  unsigned const k, vector<Lit>& outvars, bool const half);
+    void selectFromSorted(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars);
 
     // Produce a comparator, following the "half merging network" construction
     // from Asin, et al. in "Cardinality Network and their Applications"
@@ -120,7 +122,7 @@ bool Encoding<Solver>::makeAtLeast(vector<Lit>& lits, unsigned const k, vector<L
     }
 
     // for encodings other than CODISH and PW_BIT use AtMost constraint no mather the invariant k<=|lits|/2
-    if(ctype != CODISH && ctype != PW_BIT) {
+    if(ctype != CODISH && ctype != PW_BIT && ctype != PW_SEL) {
       for ( unsigned i=0 ; i < lits.size() ; i++ ) {
         lits[i] = ~lits[i];
       }
@@ -134,6 +136,7 @@ bool Encoding<Solver>::makeAtLeast(vector<Lit>& lits, unsigned const k, vector<L
     case CODISH:
       return makeCodishConstr(lits, k, outvars);
     case PW_BIT:
+    case PW_SEL:
       return makePwbitConstr(lits, k, outvars); 
     default:
         assert(0);
@@ -143,8 +146,8 @@ bool Encoding<Solver>::makeAtLeast(vector<Lit>& lits, unsigned const k, vector<L
 
 template<class Solver>
 bool Encoding<Solver>::makeAtMost(vector<Lit>& lits, unsigned const k, vector<Lit>* outvars) {
-    // maintain invariant that k<=|lits|/2 if type is CODISH or PW_BIT
-    if(ctype == CODISH || ctype == PW_BIT) {
+    // maintain invariant that k<=|lits|/2 if type is CODISH or PW_BIT or PW_SEL
+    if(ctype == CODISH || ctype == PW_BIT || ctype == PW_SEL) {
       if( k > lits.size()/2 ) {
 	for ( unsigned i=0 ; i < lits.size() ; i++ ) {
 	  lits[i] = ~lits[i];
@@ -177,6 +180,7 @@ bool Encoding<Solver>::makeAtMost(vector<Lit>& lits, unsigned const k, vector<Li
     case CODISH:
       return makeCodishConstr(lits, k, outvars);
     case PW_BIT:
+    case PW_SEL:
       return makePwbitConstr(lits, k, outvars);
     default:
         assert(0);
@@ -434,7 +438,7 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
 
     vec<Lit> args; // reused
 
-    if (ctype == PSN3 || ctype == PCN3 || ctype == CODISH || ctype == PW_BIT) {
+    if (ctype == PSN3 || ctype == PCN3 || ctype == CODISH || ctype == PW_BIT || ctype == PW_SEL) {
         // 3-clause comparator,
         // because AtMosts only need implications from 0 on the outputs to 0 on the inputs
         // and AtLeasts other way around
@@ -576,12 +580,54 @@ bool Encoding<Solver>::makePwbit(vector<Lit>& invars, vector<Lit>& outvars, unsi
       while (sorted2.size() < (k>>1)) sorted2.push_back(lit_Undef);
 
       // merge
-      pwBitMerge(sorted1, sorted2, k, outvars);
+      if (ctype == PW_BIT)
+        pwBitMerge(sorted1, sorted2, k, outvars);
+      else //ctype == PW_SEL
+        selectFromSorted(sorted1, sorted2, k, outvars);
     }
     else {
         outvars = sorted1;
     }
     return false;
+}
+
+template<class Solver>
+void Encoding<Solver>::selectFromSorted(vector<Lit> const& in1, vector<Lit> const& in2, unsigned const k, vector<Lit>& outvars) {
+    assert(in1.size()==k);
+    assert(in2.size()==k/2);
+    assert(k > 1);
+    // both in1 and in2 are sorted and in1 dominates in2 (in1[i] >= in2[i], i=0,...,k/2)
+    // on exit outvars.size() = k+k/2, elements of outvars[0..k-1] are sorted and are >= all other elements 
+
+    vector<Lit> stageIn1 = in1, stageIn2 = in2;
+    int K, logK;
+
+    for (K = 1, logK=0; K < k; K*=2, ++logK);
+    
+    K/=2;
+    for (int stage=1; stage <= logK; ++stage, K/=2) {
+      vector<Lit> out1, out2;
+      int top;
+      
+      for (int i = 0 ; i < K ; i++) 
+	out1.push_back(stageIn1[i]);
+      for (top = 0 ; top < k/2 && top+K < k; top++) {
+        out1.push_back(lit_Error);
+        out2.push_back(lit_Error);
+        makeComparator(stageIn2[top], stageIn1[top+K], out2[top], out1[top+K]);
+      }
+      for (int i = top+K ; i < k ; i++) 
+	out1.push_back(stageIn1[i]);
+      while (top < k/2) 
+	out2.push_back(stageIn2[top++]);
+      stageIn1 = out1; stageIn2 = out2;
+    }
+    for (int i=0; i < k/2; ++i) {
+      outvars.push_back(stageIn1[i]);
+      outvars.push_back(stageIn2[i]);
+    }
+    for (int i=k/2; i < k; ++i)
+      outvars.push_back(stageIn1[i]);
 }
 
 template<class Solver>
@@ -759,7 +805,7 @@ bool Encoding<Solver>::makeCodish(vector<Lit>& invars, vector<Lit>& outvars, uns
       }
       
       while (sorted2.size() > k) {
-	if ((sorted2.back() != lit_Undef) && propagate_ones) {
+	if (sorted2.back() != lit_Undef && propagate_ones) {
 	  S->addClause(~sorted2.back());
 	}
 	sorted2.pop_back();
