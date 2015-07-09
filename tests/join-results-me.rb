@@ -1,13 +1,12 @@
-
 while true
   file = $stdin.readline()
   file.strip!
-  break if file == "q"
+  break if file == "q" 
 
   p file
 
   content = File.read(file)
-  
+
   begin
     i = 0
     lines = content.lines
@@ -19,34 +18,34 @@ while true
       end
       # p i
       output = ""
-      words = lines[i].split # name
-      output += File.dirname(file) + "/" + words[1] + " "
+      words = lines[i].split # name + encoding
+      output += File.dirname(file) + "/" + words[1] + " " + words[2].split("=").last + " "
       i+=1
-      words = lines[i].split # vars cls
-      output += words[5] + " " + words[7] + " "
+      words = lines[i].split # vars
+      output += words[4] + " "
       i+=1
-      words = lines[i].split # sat?
-      output += words[1] + " " 
+      words = lines[i].split # cls
+      output += words[4] + " "
       i+=1
       words = lines[i].split # time
-      output += words[1]
+      output += words[3] + " " 
       i+=1
-      if i < lines.length && lines[i].split.first == "c" then
-        i+=1
-      end
+      words = lines[i].split # sat?
+      output += words[0]
+      i+=1
       output_lines << output
     end
     
-    File.open("ll-results", "a") do |f|
+    File.open("me-results", "a") do |f|
       output_lines.each { |l| f.puts l }
     end
 
   rescue TypeError => e
-    File.open("ll-results-errors", "a") do |f|
+    File.open("me-results-errors", "a") do |f|
       f.puts file
     end
   rescue NoMethodError => e
-    File.open("ll-results-errors", "a") do |f|
+    File.open("me-results-errors", "a") do |f|
       f.puts file
     end
   end
