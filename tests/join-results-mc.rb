@@ -30,6 +30,13 @@ while true
       words = lines[i].split # time
       output += words[3] + " " 
       i+=1
+     
+      if ( (i >= lines.length) || (lines[i].split.first == "==="))
+        output +="INDETERMINED"
+        output_lines << output
+        next
+      end
+     
       words = lines[i].split # sat?
       output += words[0]
       i+=1
@@ -41,10 +48,12 @@ while true
     end
 
   rescue TypeError => e
+#    raise Exception
     File.open("mc-results-errors", "a") do |f|
       f.puts file
     end
   rescue NoMethodError => e
+#    raise Exception
     File.open("mc-results-errors", "a") do |f|
       f.puts file
     end
