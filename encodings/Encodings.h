@@ -166,8 +166,8 @@ void Encoding<Solver>::build3sort(vector<Lit> const& invars, vector<Lit>& outvar
   S->newVar();
   outvars[2] = mkLit((unsigned int)S->nVars()-1);
 
-  // direct 3 sorter requiers 12 clauses
-  vec<Lit> c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12;
+  // direct 3 sorter requiers 7 clauses
+  vec<Lit> c1, c2, c3, c4, c5, c6, c7;
   c1.push(~invars[0]);
   c1.push(outvars[0]);
 
@@ -179,42 +179,20 @@ void Encoding<Solver>::build3sort(vector<Lit> const& invars, vector<Lit>& outvar
 
   c4.push(~invars[0]);
   c4.push(~invars[1]);
-  c4.push(outvars[0]);
+  c4.push(outvars[1]);
 
   c5.push(~invars[0]);
-  c5.push(~invars[1]);
+  c5.push(~invars[2]);
   c5.push(outvars[1]);
 
-  c6.push(~invars[0]);
+  c6.push(~invars[1]);
   c6.push(~invars[2]);
-  c6.push(outvars[0]);
+  c6.push(outvars[1]);
 
   c7.push(~invars[0]);
+  c7.push(~invars[1]);
   c7.push(~invars[2]);
-  c7.push(outvars[1]);
-
-  c8.push(~invars[1]);
-  c8.push(~invars[2]);
-  c8.push(outvars[0]);
-
-  c9.push(~invars[1]);
-  c9.push(~invars[2]);
-  c9.push(outvars[1]);
-
-  c10.push(~invars[0]);
-  c10.push(~invars[1]);
-  c10.push(~invars[2]);
-  c10.push(outvars[0]);
-
-  c11.push(~invars[0]);
-  c11.push(~invars[1]);
-  c11.push(~invars[2]);
-  c11.push(outvars[1]);
-
-  c12.push(~invars[0]);
-  c12.push(~invars[1]);
-  c12.push(~invars[2]);
-  c12.push(outvars[2]);
+  c7.push(outvars[2]);
 
   S->addClause(c1);
   S->addClause(c2);
@@ -223,11 +201,6 @@ void Encoding<Solver>::build3sort(vector<Lit> const& invars, vector<Lit>& outvar
   S->addClause(c5);
   S->addClause(c6);
   S->addClause(c7);
-  S->addClause(c8);
-  S->addClause(c9);
-  S->addClause(c10);
-  S->addClause(c11);
-  S->addClause(c12);
 }
 
 template<class Solver>
