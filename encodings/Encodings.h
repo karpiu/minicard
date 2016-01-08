@@ -11,11 +11,17 @@
 #include <assert.h>
 #include <map>
 #include <vector>
+#include <iostream>
 #include "core/SolverTypes.h"
 
 using namespace std;
 
 namespace Minisat {
+
+template<class S, class D>
+int writeMapToFile(const char *fileName, map<S,D>& myMap); // used in 
+template<class S, class D>
+int readMapFromFile(const char *fileName, map<S,D>& myMap);
 
 enum EncodingType {
     ITE = 1,
@@ -26,7 +32,10 @@ enum EncodingType {
     PAIRWISE = 6,
     CODISH = 7,
     PW_BIT = 8,
-    PW_SEL = 9
+    PW_SEL = 9,
+    CP13a = 11,
+    CP13b = 12,
+    SORT_3C = 13
 };
 
 template <class Solver>
@@ -76,6 +85,23 @@ private:
     //        and make a clause stating at least one must be false from each set.
     void buildPairwise(const vector<Lit>& lits, vec<Lit>& clause, int highest, const int k);
     
+    // as described in CP'2013 paper: Abio, Nieuwenhuis, Oliveras and Rodriguez-Carbonell:
+    // "A Parametric Approach for Smaller and Better Encodings of Cardinality Constraints"
+    pair<int,int> ANORC13_Merge(vector<Lit> const& in1, vector<Lit> const& in2, vector<Lit>& outvars, bool gen = true);
+    pair<int,int> ANORC13_Sorting(vector<Lit>& invars, vector<Lit>& outvars, bool gen = true);
+    pair<int,int> ANORC13_SMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned c, vector<Lit>& outvars, bool gen = true);
+    pair<int,int> ANORC13_Card(vector<Lit>& invars, unsigned m, vector<Lit>& outvars, bool gen = true);
+    bool makeANORC13_Card(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars);
+    pair<int,int> ANORC13_DirectMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned c, vector<Lit>& outvars, bool gen);
+    pair<int,int> ANORC13_DirectCard(vector<Lit>& invars, unsigned m, vector<Lit>& outvars, bool gen);
+    unsigned ANORC13_DirectCardClauses(vector<Lit>& invars, unsigned start, unsigned pos, unsigned k, vec<Lit>& args);
+    static const long long int lambda = 5; // used to optimize expression: lambda * #vars + #claues
+    map<unsigned,unsigned> sort_optimal_split_point;
+    map<pair<unsigned,unsigned>,unsigned> card_optimal_split_point;
+
+    // functions for 3-sorter based selection networks
+    void build3sort(vector<Lit> const& invars, vector<Lit>& outvars);
+    
     // MiniSAT Solver
     Solver* S;
 
@@ -100,7 +126,22 @@ private:
     
 public:
     
-    Encoding(Solver* _S, EncodingType const _ctype) : S(_S), ctype(_ctype), propagate_ones(true) { }
+    Encoding(Solver* _S, EncodingType const _ctype) : S(_S), ctype(_ctype), propagate_ones(true) {
+        if (ctype == CP13a || ctype == CP13b) {
+           readMapFromFile(ctype==CP13a?"/var/tmp/sortmap13a.dat":"/var/tmp/sortmap13b.dat",sort_optimal_split_point);
+           readMapFromFile(ctype==CP13a?"/var/tmp/cardmap13a.dat":"/var/tmp/cardmap13b.dat",card_optimal_split_point);
+        }
+    }
+    ~Encoding() {
+    }
+
+    void writeMaps(void) {
+        if (ctype == CP13a || ctype == CP13b) {
+            writeMapToFile(ctype==CP13a?"/var/tmp/sortmap13a.dat":"/var/tmp/sortmap13b.dat",sort_optimal_split_point);
+            writeMapToFile(ctype==CP13a?"/var/tmp/cardmap13a.dat":"/var/tmp/cardmap13b.dat",card_optimal_split_point);
+        }
+    }
+
     
     // build an AtMost or AtLeast constraint following the specified type
     // outvars, if not NULL and if ctype is cardinality or sorting network,
@@ -109,7 +150,85 @@ public:
     bool makeAtLeast(vector<Lit>& lits, unsigned const k, vector<Lit>* outvars = NULL);
 };
 
+
+
 // Function implementations follow
+
+template<class Solver>
+void Encoding<Solver>::build3sort(vector<Lit> const& invars, vector<Lit>& outvars) {
+  assert(invars.size()==3);
+  assert(outvars.size()==3);
+
+  S->newVar();
+  outvars[0] = mkLit((unsigned int)S->nVars()-1);
+  S->newVar();
+  outvars[1] = mkLit((unsigned int)S->nVars()-1);
+  S->newVar();
+  outvars[2] = mkLit((unsigned int)S->nVars()-1);
+
+  // direct 3 sorter requiers 12 clauses
+  vec<Lit> c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12;
+  c1.push(~invars[0]);
+  c1.push(outvars[0]);
+
+  c2.push(~invars[1]);
+  c2.push(outvars[0]);
+
+  c3.push(~invars[2]);
+  c3.push(outvars[0]);
+
+  c4.push(~invars[0]);
+  c4.push(~invars[1]);
+  c4.push(outvars[0]);
+
+  c5.push(~invars[0]);
+  c5.push(~invars[1]);
+  c5.push(outvars[1]);
+
+  c6.push(~invars[0]);
+  c6.push(~invars[2]);
+  c6.push(outvars[0]);
+
+  c7.push(~invars[0]);
+  c7.push(~invars[2]);
+  c7.push(outvars[1]);
+
+  c8.push(~invars[1]);
+  c8.push(~invars[2]);
+  c8.push(outvars[0]);
+
+  c9.push(~invars[1]);
+  c9.push(~invars[2]);
+  c9.push(outvars[1]);
+
+  c10.push(~invars[0]);
+  c10.push(~invars[1]);
+  c10.push(~invars[2]);
+  c10.push(outvars[0]);
+
+  c11.push(~invars[0]);
+  c11.push(~invars[1]);
+  c11.push(~invars[2]);
+  c11.push(outvars[1]);
+
+  c12.push(~invars[0]);
+  c12.push(~invars[1]);
+  c12.push(~invars[2]);
+  c12.push(outvars[2]);
+
+  S->addClause(c1);
+  S->addClause(c2);
+  S->addClause(c3);
+  S->addClause(c4);
+  S->addClause(c5);
+  S->addClause(c6);
+  S->addClause(c7);
+  S->addClause(c8);
+  S->addClause(c9);
+  S->addClause(c10);
+  S->addClause(c11);
+  S->addClause(c12);
+}
 
 template<class Solver>
 bool Encoding<Solver>::makeAtLeast(vector<Lit>& lits, unsigned const k, vector<Lit>* outvars) {
@@ -182,6 +301,9 @@ bool Encoding<Solver>::makeAtMost(vector<Lit>& lits, unsigned const k, vector<Li
     case PW_BIT:
     case PW_SEL:
       return makePwbitConstr(lits, k, outvars);
+    case CP13a:
+    case CP13b:
+      return makeANORC13_Card(lits, k, outvars);
     default:
         assert(0);
         return false;
@@ -438,7 +560,7 @@ inline void Encoding<Solver>::makeComparator(Lit const& a, Lit const& b, Lit& c1
 
     vec<Lit> args; // reused
 
-    if (ctype == PSN3 || ctype == PCN3 || ctype == CODISH || ctype == PW_BIT || ctype == PW_SEL) {
+    if (ctype == PSN3 || ctype == PCN3 || ctype == CODISH || ctype == PW_BIT || ctype >= PW_SEL) {
         // 3-clause comparator,
         // because AtMosts only need implications from 0 on the outputs to 0 on the inputs
         // and AtLeasts other way around
@@ -1045,6 +1167,488 @@ bool Encoding<Solver>::makeAtMostPairwise(const vector<Lit>& lits, const int k) 
     return true;
 }
 
+// Odd-Even Merging
+template<class Solver>
+pair<int,int> Encoding<Solver>::ANORC13_Merge(vector<Lit> const& in1, vector<Lit> const& in2, vector<Lit>& outvars, bool gen) {
+    // as described in CP'2013 paper: Abio, Nieuwenhuis, Oliveras and Rodriguez-Carbonell:
+    // "A Parametric Approach for Smaller and Better Encodings of Cardinality Constraints", pages 4-6
+
+    unsigned a = in1.size(), b = in2.size();
+
+    if (a == 1 && b == 1) {
+        outvars.push_back(lit_Error);
+        outvars.push_back(lit_Error);
+        if (gen) makeComparator(in1[0], in2[0], outvars[0], outvars[1]);
+        return make_pair(2,3);
+    }
+    if (a == 0) {
+        for (unsigned i = 0 ; i < b ; i++)   
+            outvars.push_back(in2[i]);
+	return make_pair(0,0);
+   }
+     if (b == 0) {
+        for (unsigned i = 0 ; i < a ; i++)   
+            outvars.push_back(in1[i]);
+	return make_pair(0,0);
+   }
+    // from now on: a > 0 && b > 0 && (a > 1 || b > 1)  
+    
+    // in paper, indexes start from 1, here, from 0, so evens/odds nomenclature is switched
+    vector<Lit> in1odds, in2odds, in1evens, in2evens, tmp1, tmp2;
+    // in1evens = in1[0,2,4,...], in2evens same
+    // in1odds  = in1[1,3,5,...], in2odds same
+    for (unsigned i = 0 ; i < a; i+=2) {
+        in1evens.push_back(in1[i]);
+        if (i + 1 < a) 
+            in1odds.push_back(in1[i+1]);
+    }
+    for (unsigned i = 0 ; i < b; i+=2) {
+        in2evens.push_back(in2[i]);
+        if (i + 1 < b)
+            in2odds.push_back(in2[i+1]);
+    }
+
+    if (ctype == CP13b) {
+        vector<Lit> out, out1, out2;
+        pair<int,int> evens = ANORC13_Merge(in1evens, in2evens, out1, false);
+        pair<int,int> odds  = ANORC13_Merge(in1odds, in2odds, out2, false);
+	pair<int,int> recursive = make_pair(evens.first+odds.first+(a+b-1)/2*2 , evens.second+odds.second+(a+b-1)/2*3);
+	pair<int,int> direct = ANORC13_DirectMerge(in1, in2, 0, out, false);
+	bool selectDirect = lambda * direct.first + direct.second < lambda * recursive.first + recursive.second;
+	if (selectDirect && gen)
+	    return ANORC13_DirectMerge(in1, in2, 0, outvars, true);
+	if (! gen) {
+            for (unsigned i = 0 ; i < a + b ; i++)
+                outvars.push_back(lit_Error);
+	    return (selectDirect ? direct : recursive);
+	}
+    }
+    pair<int,int> evens = ANORC13_Merge(in1evens, in2evens, tmp1, gen);
+    pair<int,int> odds  = ANORC13_Merge(in1odds, in2odds, tmp2, gen);
+
+    // set outvars[0] = tmp1[0];
+    outvars.push_back(tmp1[0]);
+
+    for (unsigned i = 0 ; i < (a+b-1)/2 ; i++) {
+        outvars.push_back(lit_Error);
+        outvars.push_back(lit_Error);
+        if (gen) makeComparator(tmp2[i], tmp1[i+1], outvars[i*2+1], outvars[i*2+2]);
+    }
+
+    // set outvars[a+b-1] if needed
+    if ((a+b) % 2 == 0) // both even or both odd
+        outvars.push_back(a % 2 == 0 ? tmp2[tmp2.size()-1] : tmp1[tmp1.size()-1]);
+    return make_pair(evens.first+odds.first+(a+b-1)/2*2 , evens.second+odds.second+(a+b-1)/2*3);
+}
+
+// Odd-Even Sorting
+template<class Solver>
+pair<int,int> Encoding<Solver>::ANORC13_Sorting(vector<Lit>& invars, vector<Lit>& outvars, bool gen) {
+    // as described in CP'2013 paper: Abio, Nieuwenhuis, Oliveras and Rodriguez-Carbonell:
+    // "A Parametric Approach for Smaller and Better Encodings of Cardinality Constraints", pages 6-7
+
+    // outvars should be created in this function
+    assert(outvars.empty());
+
+    if (invars.size() == 1) {
+        // nothing to sort, thus already sorted
+        outvars.push_back(invars[0]);
+        return make_pair(0,0);
+    }
+
+    if (invars.size() == 2) {
+        // make a simple comparator
+        outvars.push_back(lit_Error);
+        outvars.push_back(lit_Error);
+        if (gen) makeComparator(invars[0], invars[1], outvars[0], outvars[1]);
+        return make_pair(2,3);
+    }
+
+    unsigned split_point;
+    map<unsigned,unsigned>::iterator it = sort_optimal_split_point.find(invars.size());
+    if (it == sort_optimal_split_point.end()) {
+        unsigned minj = invars.size()/2;
+	long long int min = LLONG_MAX;
+	for (unsigned j = 1; j < invars.size() ; j++) {
+            vector<Lit> in1, in2;
+            for (unsigned i = 0 ; i < j ; i++)
+	        in1.push_back(invars[i]);
+            for (unsigned i = j ; i < invars.size() ; i++)
+                in2.push_back(invars[i]);
+            vector<Lit> sorted1, sorted2, out;
+            pair<int,int> sort1 = ANORC13_Sorting(in1, sorted1, false);
+            pair<int,int> sort2 = ANORC13_Sorting(in2, sorted2, false);
+            pair<int,int> merge = ANORC13_Merge(sorted1, sorted2, out, false);
+            long long int res = lambda*(sort1.first+sort2.first+merge.first) + sort1.second+sort2.second+merge.second;
+	    if (res < min) { minj = j; min = res; }
+	}
+	if (ctype == CP13b) {
+	    vector<Lit> out;
+	    pair<int,int> direct = ANORC13_DirectCard(invars, invars.size(), out, false);
+	    bool selectDirect = lambda * direct.first + direct.second < min;
+	    sort_optimal_split_point[invars.size()] = split_point =  (selectDirect ? 0 : minj);
+	} else
+            sort_optimal_split_point[invars.size()] = split_point =  minj;
+    } else
+        split_point = it->second;
+
+    if (ctype == CP13b && split_point == 0)
+        return ANORC13_DirectCard(invars, invars.size(), outvars, gen);
+    
+    vector<Lit> in1, in2;
+    for (unsigned i = 0 ; i < split_point ; i++)
+        in1.push_back(invars[i]);
+    for (unsigned i = split_point ; i < invars.size() ; i++)
+       in2.push_back(invars[i]);
+     
+    vector<Lit> sorted1, sorted2;
+    pair<int,int> sort1 = ANORC13_Sorting(in1, sorted1, gen);
+    pair<int,int> sort2 = ANORC13_Sorting(in2, sorted2, gen);
+    pair<int,int> merge = ANORC13_Merge(sorted1, sorted2, outvars, gen);
+    return make_pair(sort1.first+sort2.first+merge.first , sort1.second+sort2.second+merge.second);
+}
+
+// Simplified Odd-Even Merging
+template<class Solver>
+pair<int,int> Encoding<Solver>::ANORC13_SMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned c, 
+					       vector<Lit>& outvars, bool gen) {
+    // as described in CP'2013 paper: Abio, Nieuwenhuis, Oliveras and Rodriguez-Carbonell:
+    // "A Parametric Approach for Smaller and Better Encodings of Cardinality Constraints", pages 7-8
+    // c is the desired size of sorted output
+
+    unsigned a = in1.size(), b = in2.size();
+    
+    if (a+b <= c)
+        return ANORC13_Merge(in1, in2, outvars, gen);
+
+    if (a > c) a = c;
+    if (b > c) b = c;
+    if (a == 0) {
+        for (unsigned i = 0 ; i < b ; i++)   
+            outvars.push_back(in2[i]);
+	return make_pair(0,0);
+    }
+    if (b == 0) {
+        for (unsigned i = 0 ; i < a ; i++)   
+            outvars.push_back(in1[i]);
+	return make_pair(0,0);
+    }
+    if (a == 1 && b == 1 && c == 1) {
+        if (gen) {
+	    S->newVar();
+	    Lit ret = mkLit((unsigned)S->nVars()-1);
+            outvars.push_back(ret);
+	    vec<Lit> args;
+	    // in1[0] -> ret
+	    args.push(~in1[0]);
+	    args.push(ret);
+	    S->addClause(args);
+	    // in2[0] -> ret
+	    args[0] = ~in2[0];
+	    S->addClause(args);
+	} else
+            outvars.push_back(lit_Error);
+        return make_pair(1,2);
+    }
+    // from now on: a > 0 && b > 0 && && a,b <= c && 1 < c < a + b 
+    
+    // in paper, indexes start from 1, here, from 0, so evens/odds nomenclature is switched
+    vector<Lit> in1odds, in2odds, in1evens, in2evens, tmp1, tmp2;
+    // in1evens = in1[0,2,4,...], in2evens same
+    // in1odds  = in1[1,3,5,...], in2odds same
+    for (unsigned i = 0 ; i < a; i+=2) {
+        in1evens.push_back(in1[i]);
+        if (i + 1 < a) 
+            in1odds.push_back(in1[i+1]);
+    }
+    for (unsigned i = 0 ; i < b; i+=2) {
+        in2evens.push_back(in2[i]);
+        if (i + 1 < b)
+            in2odds.push_back(in2[i+1]);
+    }
+    if (ctype == CP13b) {
+        vector<Lit> out, out1, out2;
+        pair<int,int> evens = ANORC13_SMerge(in1evens, in2evens, c/2+1, out1, false);
+        pair<int,int> odds  = ANORC13_SMerge(in1odds, in2odds, c/2, out2, false);
+	pair<int,int> recursive = make_pair(evens.first+odds.first + c-1 , evens.second+odds.second + (c%2 ? (3*c-3)/2 : (c-1)/2*3+2));
+	pair<int,int> direct = ANORC13_DirectMerge(in1, in2, c, out, false);
+	bool selectDirect = lambda * direct.first + direct.second < lambda * recursive.first + recursive.second;
+	if (selectDirect && gen)
+	    return ANORC13_DirectMerge(in1, in2, c, outvars, true);
+	if (! gen) {
+            for (unsigned i = 0 ; i < c ; i++)
+                outvars.push_back(lit_Error);
+	    return (selectDirect ? direct : recursive);
+	}
+    }
+    pair<int,int> evens = ANORC13_SMerge(in1evens, in2evens, c/2+1, tmp1, gen);
+    pair<int,int> odds  = ANORC13_SMerge(in1odds, in2odds, c/2, tmp2, gen);
+
+    // set outvars[0] = tmp1[0];
+    outvars.push_back(tmp1[0]);
+
+    for (unsigned i = 0 ; i < (c-1)/2 ; i++) {
+        outvars.push_back(lit_Error);
+        outvars.push_back(lit_Error);
+        if (gen) makeComparator(tmp2[i], tmp1[i+1], outvars[i*2+1], outvars[i*2+2]);
+    }
+
+    // set outvars[c-1] if needed
+    if (c % 2 == 0) { // c is even
+        if (gen) {
+	    S->newVar();
+	    Lit ret = mkLit((unsigned)S->nVars()-1);
+            outvars.push_back(ret);
+	    vec<Lit> args;
+	    // tmp2[c/2-1] -> ret
+	    args.push(~tmp2[c/2-1]);
+	    args.push(ret);
+	    S->addClause(args);
+	    // tmp1[c/2] -> ret
+	    args[0] = ~tmp1[c/2];
+	    S->addClause(args);
+	} else
+            outvars.push_back(lit_Error);
+    }
+    return make_pair(evens.first+odds.first + c-1 , evens.second+odds.second + (c%2 ? (3*c-3)/2 : (c-1)/2*3+2));
+}
+
+// m-Cardinality Natwork, that is, Simplified Odd-Even Sorting
+template<class Solver>
+pair<int,int> Encoding<Solver>::ANORC13_Card(vector<Lit>& invars, unsigned m, vector<Lit>& outvars, bool gen) {
+    // as described in CP'2013 paper: Abio, Nieuwenhuis, Oliveras and Rodriguez-Carbonell:
+    // "A Parametric Approach for Smaller and Better Encodings of Cardinality Constraints", page 9
+    // m is the desired size of sorted output
+    
+    // outvars should be created in this function
+    assert(outvars.empty());
+    if (invars.size() <= m)
+        return ANORC13_Sorting(invars, outvars, gen);
+
+    unsigned split_point;
+    map<pair<unsigned,unsigned>,unsigned>::iterator it = card_optimal_split_point.find(make_pair(invars.size(),m));
+    if (it == card_optimal_split_point.end()) {
+        unsigned minj = invars.size()/2;
+        long long int min = LLONG_MAX;
+        pair<int,int> minpair = make_pair(INT_MAX,INT_MAX);
+	for (unsigned j = 1; j < invars.size() ; j++) {
+            vector<Lit> in1, in2;
+            for (unsigned i = 0 ; i < j ; i++)
+	        in1.push_back(invars[i]);
+            for (unsigned i = j ; i < invars.size() ; i++)
+                in2.push_back(invars[i]);
+            vector<Lit> sorted1, sorted2, out;
+            pair<int,int> sort1 = ANORC13_Card(in1, m, sorted1, false);
+            pair<int,int> sort2 = ANORC13_Card(in2, m, sorted2, false);
+            pair<int,int> merge = ANORC13_SMerge(sorted1, sorted2, m, out, false);
+            pair<int,int> result = make_pair(sort1.first+sort2.first+merge.first, 
+                                             sort1.second+sort2.second+merge.second);
+            long long int res = lambda*result.first + result.second;
+	    if (res < min) { minj = j; min = res; minpair = result; }
+	}
+	if (ctype == CP13b) {
+	    vector<Lit> out;
+	    pair<int,int> direct = ANORC13_DirectCard(invars, m, out, false);
+	    bool selectDirect = lambda * direct.first + direct.second < min;
+	    card_optimal_split_point[make_pair(invars.size(),m)] = split_point =  (selectDirect ? 0 : minj);
+            if (! gen) {
+	        for (unsigned i=0 ; i < m; i++) outvars.push_back(lit_Error);
+	        return (selectDirect ? direct : minpair);
+	    }
+	} else {
+            card_optimal_split_point[make_pair(invars.size(),m)] = split_point =  minj;
+            if (! gen) {
+	        for (unsigned i=0 ; i < m; i++) outvars.push_back(lit_Error);
+	        return minpair;
+	    }
+        }
+    } else
+        split_point = it->second;
+    
+    if (ctype == CP13b && split_point == 0)
+        return ANORC13_DirectCard(invars, m, outvars, gen);
+    
+    vector<Lit> in1, in2;
+    for (unsigned i = 0 ; i < split_point ; i++)
+        in1.push_back(invars[i]);
+    for (unsigned i = split_point ; i < invars.size() ; i++)
+       in2.push_back(invars[i]);
+     
+    vector<Lit> sorted1, sorted2;
+    pair<int,int> sort1 = ANORC13_Card(in1, m, sorted1, gen);
+    pair<int,int> sort2 = ANORC13_Card(in2, m, sorted2, gen);
+    pair<int,int> merge = ANORC13_SMerge(sorted1, sorted2, m, outvars, gen);
+    return make_pair(sort1.first+sort2.first+merge.first , sort1.second+sort2.second+merge.second);
+}
+
+template<class Solver>
+bool Encoding<Solver>::makeANORC13_Card(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars) {
+    // input vars
+    vector<Lit> invars;
+    for (unsigned i = 0 ; i < lits.size() ; i++) {
+        invars.push_back(lits[i]);
+    }
+
+    //output vars
+    vector<Lit> outvars;
+    
+    ANORC13_Card(invars, k+1, outvars, true);
+    
+    for (unsigned i = 0 ; i < outvars.size() ; i++) {
+        if (outvars[i] == lit_Undef)  continue;
+	if (p_outvars) {
+            p_outvars->push_back(outvars[i]);
+        }
+    }
+    
+    S->addClause(~outvars[k]);
+
+    return true;
+}
+
+// Direct Merging and Simplified Direct Merging
+template<class Solver>
+pair<int,int> Encoding<Solver>::ANORC13_DirectMerge(vector<Lit> const& in1, vector<Lit> const& in2, unsigned c,
+						    vector<Lit>& outvars, bool gen) {
+    // as described in CP'2013 paper: Abio, Nieuwenhuis, Oliveras and Rodriguez-Carbonell:
+    // "A Parametric Approach for Smaller and Better Encodings of Cardinality Constraints", page 11
+
+    unsigned a = in1.size(), b = in2.size();
+    assert( a > 0 && b > 0);
+    if (c == 0 || c > a + b) c = a + b;
+    if (a > c) a = c;
+    if (b > c) b = c;
+    
+    if (gen) {
+        for (unsigned i=0 ; i < c ; i++) {
+	    S->newVar();
+	    Lit ret = mkLit((unsigned)S->nVars()-1);
+            outvars.push_back(ret);
+	}
+        for (unsigned i=0 ; i < a ; i++) {
+	    vec<Lit> args;
+	    // in1[i] -> outvars[i]
+	    args.push(~in1[i]);
+	    args.push(outvars[i]);
+	    S->addClause(args);
+            args.push(lit_Error);
+           for (unsigned j=0 ; j < b && i + j + 1 < c ; j++) {
+	        // in1[i] & in2[j] -> outvars[i+j+1]
+	        args[1] = ~in2[j];
+	        args[2] = outvars[i+j+1];
+	        S->addClause(args);
+            }
+	}
+        for (unsigned j=0 ; j < b ; j++) {
+	    vec<Lit> args;
+	    // in2[i] -> outvars[i]
+	    args.push(~in2[j]);
+	    args.push(outvars[j]);
+	    S->addClause(args);
+	}
+    } else {
+        for (unsigned i=0 ; i < c; i++)
+            outvars.push_back(lit_Error);
+    }
+    return make_pair(c,(a+b)*c - (c*(c-1) + b*(b-1) + a*(a-1))/2); 
+    
+}
+  
+// Direct Sorting and Direct m-Cardinality Natwork
+template<class Solver>
+pair<int,int> Encoding<Solver>::ANORC13_DirectCard(vector<Lit>& invars, unsigned m, vector<Lit>& outvars, bool gen) {
+    // as described in CP'2013 paper: Abio, Nieuwenhuis, Oliveras and Rodriguez-Carbonell:
+    // "A Parametric Approach for Smaller and Better Encodings of Cardinality Constraints", page 11
+    // m is the desired size of sorted output
+
+    // outvars should be created in this function
+    assert(outvars.empty());
+    unsigned n = invars.size(), sum = 0;
+    
+    if (m == 0 || m > n) m = n;
+
+    if (gen) {
+        for (unsigned i=0 ; i < m ; i++) {
+	    S->newVar();
+	    Lit ret = mkLit((unsigned)S->nVars()-1);
+            outvars.push_back(ret);
+	}
+        for (unsigned k=1 ; k <= m ; k++) {
+	    vec<Lit> args;
+            for (unsigned i=0 ; i < k; i++)
+                args.push(lit_Error);
+            args.push(outvars[k-1]);
+	    sum += ANORC13_DirectCardClauses(invars, 0, 0, k, args);
+	}
+    } else {
+        for (unsigned i=0 ; i < m; i++)
+            outvars.push_back(lit_Error);
+	unsigned newton = 1;
+        for (unsigned k=1 ; k <= m ; k++) { // compute (n over 1) + (n over 2) + ... + (n over m)
+	    if (newton <= INT_MAX / (n-k+1))
+	        newton = newton*(n-k+1)/k; // compute Newton symbol (n over k)
+	    else {
+	        sum = INT_MAX;
+		break;
+	    }
+	    if (sum <= INT_MAX - newton)
+	        sum += newton;
+	    else {
+	        sum = INT_MAX;
+		break;
+	    }
+	}
+    }
+    return make_pair(m , sum);
+}
+  
+template<class Solver>
+unsigned Encoding<Solver>::ANORC13_DirectCardClauses(vector<Lit>& invars, unsigned start, unsigned pos, unsigned k, vec<Lit>& args) {
+    unsigned n = invars.size(), sum = 0;
+    if (pos == k) {
+	S->addClause(args);
+	return 1;
+    } else {
+        for (unsigned i = start ; i <= n - (k - pos) ; i++) {
+	    args[pos] = ~invars[i];
+	    sum += ANORC13_DirectCardClauses(invars, i+1, pos+1, k, args);
+        }
+	return sum;
+    }  
+}
+
+template<class S, class D>
+int writeMapToFile(const char *fileName, map<S,D>& myMap) {
+    FILE *out = fopen(fileName,"wb");
+    int count = 0;
+
+    if (out == NULL) return -1;
+    for (typename map<S,D>::iterator it = myMap.begin() ; it != myMap.end() ; it++) {
+        fwrite(&(it->first),sizeof(it->first),1,out);
+        fwrite(&(it->second),sizeof(it->second),1,out);
+        count++;
+    }
+    fclose(out);
+    return count;
+}
+
+template<class S, class D>
+int readMapFromFile(const char *fileName, map<S,D>& myMap) {
+    FILE *in = fopen(fileName,"rb");
+    int count = 0;
+
+    if (in == NULL) return -1;
+    while (! feof(in)) {
+        S key;
+        D value;
+        if (fread(&key,sizeof(key),1,in) != 1) break;
+        if (fread(&value,sizeof(value),1,in) != 1) break;
+        myMap.insert(make_pair(key,value));
+        count++;
+    }
+    fclose(in);
+    return count;
+}
 
 } // end namespace Minisat
 
