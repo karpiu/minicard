@@ -35,7 +35,7 @@ enum EncodingType {
     PW_SEL = 9,
     CP13a = 11,
     CP13b = 12,
-    SORT_3C = 13
+    SEL_3WISE = 13
 };
 
 template <class Solver>
@@ -48,7 +48,11 @@ private:
     bool makeAtMostPairwise(const vector<Lit>& lits, const int k);
     bool makeCodishConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
     bool makePwbitConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
+    bool make3wiseSelConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
 
+    // Produce selection network based on our work from 2016
+    bool make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k);
+    
     // Produce a sorting network, filling in outvars and constraints with the created output variables and network constraints
     void makeSortNet(vector<Lit>& invars, vector<Lit>& outvars);
     
@@ -153,55 +157,83 @@ public:
 
 
 // Function implementations follow
+ 
+template<class Solver>
+bool Encoding<Solver>::make3wiseSelConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* p_outvars) {
+  // input vars
+  vector<Lit> invars;
+  for (unsigned i = 0 ; i < lits.size() ; i++) {
+    invars.push_back(lits[i]);
+  }
+
+  //output vars
+  vector<Lit> outvars;
+
+  make3wiseSel(invars, outvars, k);
+
+  for (unsigned i = 0 ; i < outvars.size() ; i++) {
+    if (outvars[i] == lit_Undef)  continue;
+    if (p_outvars) {
+      p_outvars->push_back(outvars[i]);
+    }
+  }
+
+  if ( propagate_ones ) {
+    // at most
+    for (unsigned i = k ; i < outvars.size() ; i++) {
+      if(outvars[i] == lit_Undef) continue;
+      S->addClause(~outvars[i]);
+    }
+  } else {
+    // at least
+    for (unsigned i = 0 ; i < k ; i++) { // assuming that k <= |outvars|
+      if(outvars[i] == lit_Undef) continue;
+      S->addClause(outvars[i]);
+    }
+  }
+
+  return true;
+}
 
 template<class Solver>
-void Encoding<Solver>::build3sort(vector<Lit> const& invars, vector<Lit>& outvars) {
-  assert(invars.size()==3);
-  assert(outvars.size()==3);
+bool Encoding<Solver>::make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k) {
+  assert(outvars.empty());
 
-  S->newVar();
-  outvars[0] = mkLit((unsigned int)S->nVars()-1);
-  S->newVar();
-  outvars[1] = mkLit((unsigned int)S->nVars()-1);
-  S->newVar();
-  outvars[2] = mkLit((unsigned int)S->nVars()-1);
+  unsigned int n = invars.size();
 
-  // direct 3 sorter requiers 7 clauses
-  vec<Lit> c1, c2, c3, c4, c5, c6, c7;
-  c1.push(~invars[0]);
-  c1.push(outvars[0]);
+  if((k==1) || (k==2 && n <= 9) || (k==3 && n <= 6) || (k==4 && n <= 5) || (k==5 && n==5)) {
+    ANORC13_DirectCard(invars, k, outvars, true);
+    return true;
+  }
 
-  c2.push(~invars[1]);
-  c2.push(outvars[0]);
+  if (k >= n) {
+    makeSortNet(invars, outvars); // temporary use of existing odd-even sorting network
+    return true;
+  }
 
-  c3.push(~invars[2]);
-  c3.push(outvars[0]);
+  // split
+  vector<Lit> out1, out2, out3;
+  _3wiseSplit(invars, out1, out2, out3);
 
-  c4.push(~invars[0]);
-  c4.push(~invars[1]);
-  c4.push(outvars[1]);
+  // recursive calls
+  vector<Lit> sorted1, sorted2, sorted3;
+  make3wiseSel(out1, sorted1, k);
+  make3wiseSel(out2, sorted2, k>>1);
+  make3wiseSel(out3, sorted3, k>>2);
 
-  c5.push(~invars[0]);
-  c5.push(~invars[2]);
-  c5.push(outvars[1]);
-
-  c6.push(~invars[1]);
-  c6.push(~invars[2]);
-  c6.push(outvars[1]);
-
-  c7.push(~invars[0]);
-  c7.push(~invars[1]);
-  c7.push(~invars[2]);
-  c7.push(outvars[2]);
-
-  S->addClause(c1);
-  S->addClause(c2);
-  S->addClause(c3);
-  S->addClause(c4);
-  S->addClause(c5);
-  S->addClause(c6);
-  S->addClause(c7);
+  // merging
 }
+
+// Pairwise Splitting
+template<class Solver>
+  void Encoding<Solver>::_3wiseSplit(vector<Lit> const& in, vector<Lit>& out1, vector<Lit>& out2, vector<Lit>& out3) {
+  // out1/2/3 should be created in this function
+  assert(out1.empty());
+  assert(out2.empty());
+  assert(out3.empty());
+  
+}
+
 
 template<class Solver>
 bool Encoding<Solver>::makeAtLeast(vector<Lit>& lits, unsigned const k, vector<Lit>* outvars) {
@@ -277,6 +309,8 @@ bool Encoding<Solver>::makeAtMost(vector<Lit>& lits, unsigned const k, vector<Li
     case CP13a:
     case CP13b:
       return makeANORC13_Card(lits, k, outvars);
+    case SEL_3WISE:
+      return make3wiseSelConstr(lits, k, outvars);
     default:
         assert(0);
         return false;
