@@ -13,12 +13,13 @@
 #include <vector>
 #include <iostream>
 #include "core/SolverTypes.h"
-#include "encodings/Encodings_MW.h"
 
 using namespace std;
 
 namespace Minisat {
 
+#include "encodings/Encodings_MW.h"
+  
 template<class S, class D>
 int writeMapToFile(const char *fileName, map<S,D>& myMap); // used in 
 template<class S, class D>
@@ -200,6 +201,8 @@ bool Encoding<Solver>::makeAtMost(vector<Lit>& lits, unsigned const k, vector<Li
     // propagate ones forward for AtMost constraint
     propagate_ones=true;
 
+    Encoding_MW<Solver> *enc = new Encoding_MW<Solver>(S);
+    
     switch(ctype) {
     case ITE:
         {
@@ -227,11 +230,11 @@ bool Encoding<Solver>::makeAtMost(vector<Lit>& lits, unsigned const k, vector<Li
     case CP13b:
       return makeANORC13_Card(lits, k, outvars);
     case SEL_3WISE:
-      Encoding_MW<Solver> enc = new Encoding_MW(S);
-      return enc.make3wiseSelConstr(lits, k, outvars);
+      return enc->make3wiseSelConstr(lits, k, outvars);
     default:
-        assert(0);
-        return false;
+      delete enc;
+      assert(0);
+      return false;
     }
 }
 

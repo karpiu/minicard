@@ -2,10 +2,12 @@
 #define __Encodings_MW_h
 
 #include <assert.h>
+#include <map>
 #include <vector>
+#include <iostream>
 #include "core/SolverTypes.h"
 
-namespace Minisat {
+using namespace std;
 
   template <class Solver>
   class Encoding_MW {
@@ -18,8 +20,8 @@ namespace Minisat {
 
   public:
     bool make3wiseSelConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
-    Encoding(Solver* _S) : S(_S) { }
-    ~Encoding() { }
+    Encoding_MW(Solver* _S) : S(_S) { }
+    ~Encoding_MW() { }
   };
   
   template<class Solver>
@@ -57,12 +59,12 @@ namespace Minisat {
     unsigned int n = invars.size();
 
     if((k==1) || (k==2 && n <= 9) || (k==3 && n <= 6) || (k==4 && n <= 5) || (k==5 && n==5)) {
-      ANORC13_DirectCard(invars, k, outvars, true);
+      //ANORC13_DirectCard(invars, k, outvars, true);
       return true;
     }
 
     if (k >= n) {
-      makeSortNet(invars, outvars); // temporary use of existing odd-even sorting network
+      //makeSortNet(invars, outvars); // temporary use of existing odd-even sorting network
       return true;
     }
 
@@ -94,7 +96,5 @@ namespace Minisat {
   bool Encoding_MW<Solver>::make3Comparator(Lit const& x1, Lit const& x2, Lit const& x3, Lit& y1, Lit& y2, Lit& y3) {
     return true;
   }
-  
-} // end namespace Minisat
 
 #endif // __Encodings_MW_h
