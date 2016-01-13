@@ -127,34 +127,49 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
   n1 = x.size();
   n2 = y.size();
   n3 = z.size();
+  
+  vector<Lit> xi_1 (x);
+  vector<Lit> yi_1 (y);
+  vector<Lit> zi_1 (z);
 
   unsigned h = pow2roundup(k);
+
   while (h > 1) {
     h = h/2;
+
+    b = min(n2, n3 + h);
+    
+    vector<Lit> xi (min(n1, b + h), lit_Error);
+    vector<Lit> yi (b, lit_Error);
+    vector<Lit> zi (n3, lit_Error);
+    
     for (unsigned j=0; j<n3; j++) {
       if ((j+h <= n2) && (j + 2*h <= n1)) {
-        //
+        make3Comparator(xi_1[j+2*h], yi_1[j+h], zi_1[j], xi[j+2*h], yi[j+h], zi[j]);
       } else if (j + h <= n2) {
-        //
+        make2Comparator(yi_1[j+h], zi_1[j], yi[j+h], zi[j]);
       } else if (j + 2*h <= n1) {
-	//
+	make2Comparator(xi_1[j+2*h], zi_1[j], xi[j+2*h], zi[j]);
       } else {
-        //
+        zi[j] = zi_1[j]; 
       }
     }
     for (unsigned j=0; j < min(n2,h); j++) {
       if (j + h <= n1) {
-	//
+	make2Comparator(xi_1[j+h], yi_1[j], xi[j+h], yi[j]);
       } else {
-	//
+	yi[j] = yi_1[j];
       }
     }
     for (unsigned j=0; j<h; j++) {
-      //
+      xi[j] = xi_1[j];
     }
+    xi_1 = xi;
+    yi_1 = yi;
+    zi_1 = zi;
   }
   for (unsigned j=1; j<n1; j++) {
-    //
+    make2Comparator(xi_1[j], zi_1[j-1], xi[j], zi[j-1]);
   }
 
   // copy k elements to outvars
