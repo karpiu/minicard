@@ -13,8 +13,7 @@ template <class Solver>
 class Encoding_MW {
  private:
   bool make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k);
-  void _3wiseSplit(vector<Lit> const& in, vector<Lit>& out1, vector<Lit>& out2, vector<Lit>& out3);
-
+  void make3wiseMerge(vector<Lit> const& x, vector<Lit> const& y, vector<Lit> const& z, vector<Lit>& outvars, unsigned int k);
   void make3Comparator(Lit const& x1, Lit const& x2, Lit const& x3, Lit& y1, Lit& y2, Lit& y3);
   inline void make2Comparator(Lit const& a, Lit const& b, Lit& c1, Lit& c2);
 
@@ -62,42 +61,60 @@ template<class Solver>
 bool Encoding_MW<Solver>::make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars, unsigned const k) {
   assert(outvars.empty());
 
-  unsigned int n = invars.size();
+  unsigned n = invars.size();
 
+  assert(k <= n);
+  
   if((k==1) || (k==2 && n <= 9) || (k==3 && n <= 6) || (k==4 && n <= 5) || (k==5 && n==5)) {
     makeDirectNetwork(invars, outvars, k);
     return true;
   }
 
-  if (k >= n) {
-    //makeSortNet(invars, outvars); // temporary use of existing odd-even sorting network
-    return true;
+  unsigned n1, n2, n3;
+  n1 = (n+2)/3;
+  n2 = (n+1)/3;
+  n3 = n/3;
+  
+  // split
+  vector<Lit> x, y, z;
+  for (unsigned i=0; i < n3; i++) {
+    x.push_back(lit_Error);
+    y.push_back(lit_Error);
+    z.push_back(lit_Error);
+    make3Comparator(invars[3*i], invars[3*i+1], invars[3*i+2], x[i], y[i], z[i]);
   }
 
-  // split
-  vector<Lit> out1, out2, out3;
-  _3wiseSplit(invars, out1, out2, out3);
+  if (n % 3 == 1) {
+    x.push_back(lit_Error);
+    x[n1-1] = invars[n-1];
+  } else if (n % 3 == 2) {
+    x.push_back(lit_Error);
+    y.push_back(lit_Error);
+    make2Comparator(invars[n-2], invars[n-1], x[n1-1], y[n2-1]);
+  }
 
+  unsigned k1, k2, k3;
+  k1 = min(k, n1);
+  k2 = min(k/2, n2);
+  k3 = k/3;
+  
   // recursive calls
   vector<Lit> sorted1, sorted2, sorted3;
-  make3wiseSel(out1, sorted1, k);
-  make3wiseSel(out2, sorted2, k/2);
-  make3wiseSel(out3, sorted3, k/3);
+  make3wiseSel(x, sorted1, k1);
+  make3wiseSel(y, sorted2, k2);
+  make3wiseSel(z, sorted3, k3);
 
   // merging
-
+  make3wiseMerge(sorted1, sorted2, sorted3, outvars, k);
+  
   return true;
 }
 
-// Pairwise Splitting
 template<class Solver>
-void Encoding_MW<Solver>::_3wiseSplit(vector<Lit> const& in, vector<Lit>& out1, vector<Lit>& out2, vector<Lit>& out3) {
-  // out1/2/3 should be created in this function
-  assert(out1.empty());
-  assert(out2.empty());
-  assert(out3.empty());
-}
+void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const& y, vector<Lit> const& z, vector<Lit>& outvars, unsigned int k) {
   
+}
+
 template<class Solver>
 void Encoding_MW<Solver>::make3Comparator(Lit const& x1, Lit const& x2, Lit const& x3, Lit& y1, Lit& y2, Lit& y3) {
   // if one of our inputs is a constant false, we use normal comparator on the other two
