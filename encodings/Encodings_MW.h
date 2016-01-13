@@ -22,6 +22,17 @@ class Encoding_MW {
 
   Solver* S;
 
+  inline unsigned pow2roundup (unsigned x) {
+    if(x == 0) return 0;
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    return x+1;
+  }
+  
  public:
   bool make3wiseSelConstr(const vector<Lit>& lits, unsigned const k, vector<Lit>* outvars);
 
@@ -99,20 +110,57 @@ bool Encoding_MW<Solver>::make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars
   k3 = k/3;
   
   // recursive calls
-  vector<Lit> sorted1, sorted2, sorted3;
-  make3wiseSel(x, sorted1, k1);
-  make3wiseSel(y, sorted2, k2);
-  make3wiseSel(z, sorted3, k3);
+  vector<Lit> _x, _y, _z;
+  make3wiseSel(x, _x, k1);
+  make3wiseSel(y, _y, k2);
+  make3wiseSel(z, _z, k3);
 
   // merging
-  make3wiseMerge(sorted1, sorted2, sorted3, outvars, k);
+  make3wiseMerge(_x, _y, _z, outvars, k);
   
   return true;
 }
 
 template<class Solver>
 void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const& y, vector<Lit> const& z, vector<Lit>& outvars, unsigned int k) {
-  
+  unsigned n1, n2, n3;
+  n1 = x.size();
+  n2 = y.size();
+  n3 = z.size();
+
+  unsigned h = pow2roundup(k);
+  while (h > 1) {
+    h = h/2;
+    for (unsigned j=0; j<n3; j++) {
+      if ((j+h <= n2) && (j + 2*h <= n1)) {
+        //
+      } else if (j + h <= n2) {
+        //
+      } else if (j + 2*h <= n1) {
+	//
+      } else {
+        //
+      }
+    }
+    for (unsigned j=0; j < min(n2,h); j++) {
+      if (j + h <= n1) {
+	//
+      } else {
+	//
+      }
+    }
+    for (unsigned j=0; j<h; j++) {
+      //
+    }
+  }
+  for (unsigned j=1; j<n1; j++) {
+    //
+  }
+
+  // copy k elements to outvars
+  for (unsigned j=0; j<k; j++) {
+    //
+  }
 }
 
 template<class Solver>
