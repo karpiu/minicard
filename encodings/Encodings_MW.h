@@ -137,10 +137,8 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
   while (h > 1) {
     h = h/2;
 
-    b = min(n2, n3 + h);
-    
-    vector<Lit> xi (min(n1, b + h), lit_Error);
-    vector<Lit> yi (b, lit_Error);
+    vector<Lit> xi (n1, lit_Error);
+    vector<Lit> yi (n2, lit_Error);
     vector<Lit> zi (n3, lit_Error);
     
     for (unsigned j=0; j<n3; j++) {
@@ -164,17 +162,22 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
     for (unsigned j=0; j<h; j++) {
       xi[j] = xi_1[j];
     }
-    xi_1 = xi;
-    yi_1 = yi;
-    zi_1 = zi;
+    xi_1 = vector<Lit>(xi);
+    yi_1 = vector<Lit>(yi);
+    zi_1 = vector<Lit>(zi);
   }
+  
+  vector<Lit> xi (n1, lit_Error);
+  vector<Lit> zi (n3, lit_Error);
   for (unsigned j=1; j<n1; j++) {
     make2Comparator(xi_1[j], zi_1[j-1], xi[j], zi[j-1]);
   }
-
+  
   // copy k elements to outvars
   for (unsigned j=0; j<k; j++) {
-    //
+    if(j % 3 == 0) outvars[j]=xi[j];
+    else if (j % 3 == 1) outvars[j]=yi_1[j];
+    else outvars[j]=zi[j];
   }
 }
 
