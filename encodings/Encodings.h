@@ -230,6 +230,7 @@ bool Encoding<Solver>::makeAtMost(vector<Lit>& lits, unsigned const k, vector<Li
     case CP13b:
       return makeANORC13_Card(lits, k, outvars);
     case SEL_3WISE:
+      cout<< "started 3wise sel\n";
       return enc->make3wiseSelConstr(lits, k, outvars);
     default:
       delete enc;
