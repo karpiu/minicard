@@ -158,13 +158,13 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
     for (unsigned j=0; j<n3; j++) {
       if ((j+h < n2) && (j + 2*h < n1)) {
 	cout << "3\n";
-        make3Comparator(xi_1[j+2*h], yi_1[j+h], zi_1[j], xi[j+2*h], yi[j+h], zi[j]); cout << "3 komp?\n";
+        make3Comparator(xi_1[j+2*h], yi_1[j+h], zi_1[j], zi[j], yi[j+h], xi[j+2*h]); cout << "3 komp?\n";
       } else if (j + h < n2) {
 	cout << "2.1\n";
-        make2Comparator(yi_1[j+h], zi_1[j], yi[j+h], zi[j]); cout << "2 komp1?\n";
+        make2Comparator(yi_1[j+h], zi_1[j], zi[j], yi[j+h]); cout << "2 komp1?\n";
       } else if (j + 2*h < n1) {
 	cout << "2.2\n";
-	make2Comparator(xi_1[j+2*h], zi_1[j], xi[j+2*h], zi[j]); cout << "2 komp2?\n";
+	make2Comparator(xi_1[j+2*h], zi_1[j], zi[j], xi[j+2*h]); cout << "2 komp2?\n";
       } else {
         zi[j] = zi_1[j]; 
       }
@@ -172,7 +172,7 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
     cout << "MRG:   For2\n";
     for (unsigned j=0; j < min(n2,h); j++) {
       if (j + h < n1) {
-	make2Comparator(xi_1[j+h], yi_1[j], xi[j+h], yi[j]);
+	make2Comparator(xi_1[j+h], yi_1[j], yi[j], xi[j+h]);
       } else {
 	yi[j] = yi_1[j];
       }
@@ -190,8 +190,8 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
   
   vector<Lit> xi (n1, lit_Error);
   vector<Lit> zi (n3, lit_Error);
-  for (unsigned j=1; j<n1; j++) {
-    make2Comparator(xi_1[j], zi_1[j-1], xi[j], zi[j-1]);
+  for (unsigned j=1; j<min(n1,n3+1); j++) {
+    make2Comparator(xi_1[j], zi_1[j-1], zi[j-1], xi[j]);
   }
 
   cout << "MRG: copying lits to outvars\n";
