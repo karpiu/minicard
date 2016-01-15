@@ -195,8 +195,10 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
   }
 
   cout << "MRG: copying lits to outvars\n";
+  if (k>0) outvars.push_back(xi_1[0]);
+
   // copy k elements to outvars
-  for (unsigned j=0; j<k; j++) {
+  for (unsigned j=1; j<k; j++) {
     if(j % 3 == 0) outvars.push_back(xi[j]);
     else if (j % 3 == 1) outvars.push_back(yi_1[j]);
     else outvars.push_back(zi[j]);
