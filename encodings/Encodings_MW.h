@@ -51,7 +51,6 @@ bool Encoding_MW<Solver>::make3wiseSelConstr(const vector<Lit>& lits, unsigned c
   //output vars
   vector<Lit> outvars;
 
-  cout << "before make3wiseSel\n";
   make3wiseSel(invars, outvars, k);
 
   for (unsigned i = 0 ; i < outvars.size() ; i++) {
@@ -78,9 +77,7 @@ bool Encoding_MW<Solver>::make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars
   assert(k <= n);
 
   if((k==1) || (k==2 && n <= 9) || (k==3 && n <= 6) || (k==4 && n <= 5) || (k==5 && n==5)) {
-    cout << "before direct network n=" << n << " k=" << k << "\n";
     makeDirectNetwork(invars, outvars, k);
-    cout << "after direct network\n";
     return true;
   }
 
@@ -89,7 +86,6 @@ bool Encoding_MW<Solver>::make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars
   n2 = (n+1)/3;
   n3 = n/3;
   
-  cout << "before split\n";
   // split
   vector<Lit> x, y, z;
   for (unsigned i=0; i < n3; i++) {
@@ -108,27 +104,20 @@ bool Encoding_MW<Solver>::make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars
     make2Comparator(invars[n-2], invars[n-1], x[n1-1], y[n2-1]);
   }
   
-  cout << "after split\n";
-  
   unsigned k1, k2, k3;
   k1 = min(k, n1);
   k2 = min(k/2, n2);
   k3 = k/3;
 
-  cout << "before recursive calls\n";
   // recursive calls
   vector<Lit> _x, _y, _z;
   make3wiseSel(x, _x, k1);
   make3wiseSel(y, _y, k2);
   make3wiseSel(z, _z, k3);
 
-  cout << "after recursive calls\n";
-  
   // merging
   make3wiseMerge(_x, _y, _z, outvars, k);
-
-  cout << "AFTER merge\n";
-  
+ 
   return true;
 }
 
@@ -143,9 +132,17 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
   vector<Lit> yi_1 (y);
   vector<Lit> zi_1 (z);
 
+
+  for(unsigned int i=0; i<n1; i++) cout << x[i].x << " ";
+  cout << "\n";
+  for(unsigned int i=0; i<n2; i++) cout << y[i].x << " ";
+  cout << "\n";
+  for(unsigned int i=0; i<n3; i++) cout << z[i].x << " ";
+  cout << "\n";
+  
   unsigned h = pow2roundup(k);
 
-  cout << "MRG: before while loop n1="<< n1 << " n2=" << n2 << " n3=" << n3 << "\n";
+  cout << "before while loop\n";
   
   while (h > 1) {
     h = h/2;
@@ -154,22 +151,17 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
     vector<Lit> yi (n2, lit_Error);
     vector<Lit> zi (n3, lit_Error);
 
-    cout << "MRG:   For1\n";
     for (unsigned j=0; j<n3; j++) {
       if ((j+h < n2) && (j + 2*h < n1)) {
-	cout << "3\n";
-        make3Comparator(xi_1[j+2*h], yi_1[j+h], zi_1[j], zi[j], yi[j+h], xi[j+2*h]); cout << "3 komp?\n";
+        make3Comparator(xi_1[j+2*h], yi_1[j+h], zi_1[j], zi[j], yi[j+h], xi[j+2*h]);
       } else if (j + h < n2) {
-	cout << "2.1\n";
-        make2Comparator(yi_1[j+h], zi_1[j], zi[j], yi[j+h]); cout << "2 komp1?\n";
+        make2Comparator(yi_1[j+h], zi_1[j], zi[j], yi[j+h]);
       } else if (j + 2*h < n1) {
-	cout << "2.2\n";
-	make2Comparator(xi_1[j+2*h], zi_1[j], zi[j], xi[j+2*h]); cout << "2 komp2?\n";
+	make2Comparator(xi_1[j+2*h], zi_1[j], zi[j], xi[j+2*h]);
       } else {
         zi[j] = zi_1[j]; 
       }
     }
-    cout << "MRG:   For2\n";
     for (unsigned j=0; j < min(n2,h); j++) {
       if (j + h < n1) {
 	make2Comparator(xi_1[j+h], yi_1[j], yi[j], xi[j+h]);
@@ -177,32 +169,32 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
 	yi[j] = yi_1[j];
       }
     }
-    cout << "MRG:   For3\n";
-    for (unsigned j=0; j<h; j++) {
+    for (unsigned j=0; j<min(n1,h); j++) {
       xi[j] = xi_1[j];
     }
-    xi_1 = vector<Lit>(xi);
-    yi_1 = vector<Lit>(yi);
-    zi_1 = vector<Lit>(zi);
+    for (unsigned j=0; j < min(n1,min(n2+h,n3+2*h)); j++) xi_1[j] = xi[j];
+    for (unsigned j=0; j < min(n2,n3+h); j++) yi_1[j] = yi[j];
+    for (unsigned j=0; j < n3; j++) zi_1[j] = zi[j];
   }
 
-  cout << "MRG: after while loop, before last cleanup\n";
+  cout << "after while loop\n";
   
   vector<Lit> xi (n1, lit_Error);
   vector<Lit> zi (n3, lit_Error);
   for (unsigned j=1; j<min(n1,n3+1); j++) {
     make2Comparator(xi_1[j], zi_1[j-1], zi[j-1], xi[j]);
   }
-
-  cout << "MRG: copying lits to outvars\n";
-  if (k>0) outvars.push_back(xi_1[0]);
+  for (unsigned j=1; j < min(n1,n3+1); j++) xi_1[j] = x[j];
+  for (unsigned j=0; j < min(n1-1,n3); j++) zi_1[j] = zi[j];
 
   // copy k elements to outvars
-  for (unsigned j=1; j<k; j++) {
-    if(j % 3 == 0) outvars.push_back(xi[j]);
-    else if (j % 3 == 1) outvars.push_back(yi_1[j]);
-    else outvars.push_back(zi[j]);
-  }
+  for (unsigned j=0; j<k; j++)
+    outvars.push_back(j % 3 == 0 ? xi_1[j/3] : (j % 3 == 1 ? yi_1[j/3] : zi_1[j/3]));
+
+  for (unsigned j=(k+2)/3; j < n1; j++) 
+     if (xi_1[j] != lit_Undef) S->addClause(~xi_1[j]);
+  for (unsigned j=(k+1)/3; j < n2; j++) 
+     if (yi_1[j] != lit_Undef) S->addClause(~yi_1[j]);
 }
 
 template<class Solver>
@@ -279,7 +271,6 @@ void Encoding_MW<Solver>::make3Comparator(Lit const& x1, Lit const& x2, Lit cons
 
 template<class Solver>
 inline void Encoding_MW<Solver>::make2Comparator(Lit const& a, Lit const& b, Lit& c1, Lit& c2) {
-  cout << "2comp start\n";
   // if one of our inputs is a constant false, we can simplify greatly
   if (a == lit_Undef) {
     c1 = b;
@@ -303,26 +294,21 @@ inline void Encoding_MW<Solver>::make2Comparator(Lit const& a, Lit const& b, Lit
   // 3-clause comparator,
   // because AtMosts only need implications from 0 on the outputs to 0 on the inputs
 
-  cout << "a -> c1\n";
   // a -> c1
   args.push(~a);
   args.push(c1);
   S->addClause(args);
   
-  cout << "b -> c1\n";
   // b -> c1
   args[0] = ~b;
   // Already there: args[1] = c1;
   S->addClause(args);
 
-  cout << "!c2 -> !a v !b\n";
   // !c2 -> !a v !b'
   args[0] = ~a;
   args[1] = ~b;
   args.push(c2);
-  cout << "add clause\n";
   S->addClause(args);
-  cout << "2comp end\n";
 }
 
 // Direct Sorting and Direct m-Cardinality Natwork
