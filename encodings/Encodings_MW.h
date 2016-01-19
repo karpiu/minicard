@@ -75,9 +75,16 @@ bool Encoding_MW<Solver>::make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars
   unsigned n = invars.size();
 
   assert(k <= n);
+cerr<< "n = " << n << " k = " << k << endl;
+for (unsigned i=0; i < n; i++) cerr << toInt(invars[i]) << " "; cerr << endl;
 
-  if((k==1) || (k==2 && n <= 9) || (k==3 && n <= 6) || (k==4 && n <= 5) || (k==5 && n==5)) {
-    makeDirectNetwork(invars, outvars, k);
+  if((k<=1) || (k==2 && n <= 9) || (k==3 && n <= 6) || (k==4 && n <= 5) || (k==5 && n==5)) {
+    makeDirectNetwork(invars, outvars, k < n ? k+1 : k);
+    if (k < n) S->addClause(~outvars[k]);
+
+    cerr<< "outvars DIR:" << endl;
+    for (unsigned i=0; i < outvars.size(); i++) cerr << toInt(outvars[i]) << " "; cerr << endl;
+    
     return true;
   }
 
@@ -117,6 +124,9 @@ bool Encoding_MW<Solver>::make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars
 
   // merging
   make3wiseMerge(_x, _y, _z, outvars, k);
+
+cerr<< "outvars MERGE:" << endl;
+ for (unsigned i=0; i < outvars.size(); i++) cerr << toInt(outvars[i]) << " "; cerr << endl;
  
   return true;
 }
@@ -127,26 +137,21 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
   n1 = x.size();
   n2 = y.size();
   n3 = z.size();
-  
+
   vector<Lit> xi_1 (x);
   vector<Lit> yi_1 (y);
   vector<Lit> zi_1 (z);
 
-
-  for(unsigned int i=0; i<n1; i++) cout << x[i].x << " ";
-  cout << "\n";
-  for(unsigned int i=0; i<n2; i++) cout << y[i].x << " ";
-  cout << "\n";
-  for(unsigned int i=0; i<n3; i++) cout << z[i].x << " ";
-  cout << "\n";
-  
   unsigned h = pow2roundup(k);
-
-  cout << "before while loop\n";
   
   while (h > 1) {
     h = h/2;
 
+    cerr << "h = " << h << endl;
+    cerr << "x: "; for (unsigned i=0; i < xi_1.size(); i++) cerr << toInt(xi_1[i]) << " "; cerr << endl;
+    cerr << "y: "; for (unsigned i=0; i < yi_1.size(); i++) cerr << toInt(yi_1[i]) << " "; cerr << endl;
+    cerr << "z: "; for (unsigned i=0; i < zi_1.size(); i++) cerr << toInt(zi_1[i]) << " "; cerr << endl;
+    
     vector<Lit> xi (n1, lit_Error);
     vector<Lit> yi (n2, lit_Error);
     vector<Lit> zi (n3, lit_Error);
@@ -157,9 +162,11 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
       } else if (j + h < n2) {
         make2Comparator(yi_1[j+h], zi_1[j], zi[j], yi[j+h]);
       } else if (j + 2*h < n1) {
+	cerr << "    " << toInt(xi_1[j+2*h]) << " " << toInt(zi_1[j]) << " " << toInt(zi[j]) << " " << toInt(xi[j+2*h]) << endl;
 	make2Comparator(xi_1[j+2*h], zi_1[j], zi[j], xi[j+2*h]);
+	cerr << "    " << toInt(xi_1[j+2*h]) << " " << toInt(zi_1[j]) << " " << toInt(zi[j]) << " " << toInt(xi[j+2*h]) << endl;
       } else {
-        zi[j] = zi_1[j]; 
+        zi[j] = zi_1[j];
       }
     }
     for (unsigned j=0; j < min(n2,h); j++) {
@@ -177,7 +184,11 @@ void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const
     for (unsigned j=0; j < n3; j++) zi_1[j] = zi[j];
   }
 
-  cout << "after while loop\n";
+  cerr << "AFTER WHILE" <<  endl;
+  cerr << "x: "; for (unsigned i=0; i < xi_1.size(); i++) cerr << toInt(xi_1[i]) << " "; cerr << endl;
+  cerr << "y: "; for (unsigned i=0; i < yi_1.size(); i++) cerr << toInt(yi_1[i]) << " "; cerr << endl;
+  cerr << "z: "; for (unsigned i=0; i < zi_1.size(); i++) cerr << toInt(zi_1[i]) << " "; cerr << endl;
+    
   
   vector<Lit> xi (n1, lit_Error);
   vector<Lit> zi (n3, lit_Error);
@@ -323,6 +334,7 @@ bool Encoding_MW<Solver>::makeDirectNetwork(vector<Lit>& invars, vector<Lit>& ou
   unsigned n = invars.size();
   
   if (k == 0 || k > n) k = n;
+cerr<< "DIR: n = " << n << " k = " << k << endl;
 
   for (unsigned i=0 ; i < k ; i++) {
     S->newVar();
