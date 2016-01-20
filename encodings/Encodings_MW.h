@@ -80,8 +80,12 @@ for (unsigned i=0; i < n; i++) cerr << toInt(invars[i]) << " "; cerr << endl;
 
   if((k<=1) || (k==2 && n <= 9) || (k==3 && n <= 6) || (k==4 && n <= 5) || (k==5 && n==5)) {
     makeDirectNetwork(invars, outvars, k < n ? k+1 : k);
-    if (k < n) S->addClause(~outvars[k]);
 
+    if (k < n) {
+      S->addClause(~outvars[k]);
+      outvars.pop_back();
+    }
+    
     cerr<< "outvars DIR:" << endl;
     for (unsigned i=0; i < outvars.size(); i++) cerr << toInt(outvars[i]) << " "; cerr << endl;
     
@@ -133,79 +137,50 @@ cerr<< "outvars MERGE:" << endl;
 
 template<class Solver>
 void Encoding_MW<Solver>::make3wiseMerge(vector<Lit> const& x, vector<Lit> const& y, vector<Lit> const& z, vector<Lit>& outvars, unsigned int k) {
-  unsigned n1, n2, n3;
-  n1 = x.size();
-  n2 = y.size();
-  n3 = z.size();
-
-  vector<Lit> xi_1 (x);
-  vector<Lit> yi_1 (y);
-  vector<Lit> zi_1 (z);
-
+  unsigned n1 = x.size(), n2 = y.size(), n3 = z.size();
+  vector<Lit> xi = x, yi = y, zi = z;
   unsigned h = pow2roundup(k);
   
   while (h > 1) {
     h = h/2;
 
-    cerr << "h = " << h << endl;
-    cerr << "x: "; for (unsigned i=0; i < xi_1.size(); i++) cerr << toInt(xi_1[i]) << " "; cerr << endl;
-    cerr << "y: "; for (unsigned i=0; i < yi_1.size(); i++) cerr << toInt(yi_1[i]) << " "; cerr << endl;
-    cerr << "z: "; for (unsigned i=0; i < zi_1.size(); i++) cerr << toInt(zi_1[i]) << " "; cerr << endl;
-    
-    vector<Lit> xi (n1, lit_Error);
-    vector<Lit> yi (n2, lit_Error);
-    vector<Lit> zi (n3, lit_Error);
-
     for (unsigned j=0; j<n3; j++) {
+      Lit xout = lit_Error, yout = lit_Error, zout = lit_Error;
       if ((j+h < n2) && (j + 2*h < n1)) {
-        make3Comparator(xi_1[j+2*h], yi_1[j+h], zi_1[j], zi[j], yi[j+h], xi[j+2*h]);
+        make3Comparator(xi[j+2*h], yi[j+h], zi[j], zout, yout, xout);
+	xi[j+2*h] = xout; yi[j+h] = yout; zi[j] = zout;
       } else if (j + h < n2) {
-        make2Comparator(yi_1[j+h], zi_1[j], zi[j], yi[j+h]);
+        make2Comparator(yi[j+h], zi[j], zout, yout);
+	yi[j+h] = yout; zi[j] = zout;
       } else if (j + 2*h < n1) {
-	cerr << "    " << toInt(xi_1[j+2*h]) << " " << toInt(zi_1[j]) << " " << toInt(zi[j]) << " " << toInt(xi[j+2*h]) << endl;
-	make2Comparator(xi_1[j+2*h], zi_1[j], zi[j], xi[j+2*h]);
-	cerr << "    " << toInt(xi_1[j+2*h]) << " " << toInt(zi_1[j]) << " " << toInt(zi[j]) << " " << toInt(xi[j+2*h]) << endl;
-      } else {
-        zi[j] = zi_1[j];
-      }
+	make2Comparator(xi[j+2*h], zi[j], zout, xout);
+	xi[j+2*h] = xout; zi[j] = zout;
+      } 
     }
     for (unsigned j=0; j < min(n2,h); j++) {
+      Lit xout = lit_Error, yout = lit_Error;
       if (j + h < n1) {
-	make2Comparator(xi_1[j+h], yi_1[j], yi[j], xi[j+h]);
-      } else {
-	yi[j] = yi_1[j];
-      }
+	make2Comparator(xi[j+h], yi[j], yout, xout);
+	xi[j+h] = xout; yi[j] = yout;
+      } 
     }
-    for (unsigned j=0; j<min(n1,h); j++) {
-      xi[j] = xi_1[j];
-    }
-    for (unsigned j=0; j < min(n1,min(n2+h,n3+2*h)); j++) xi_1[j] = xi[j];
-    for (unsigned j=0; j < min(n2,n3+h); j++) yi_1[j] = yi[j];
-    for (unsigned j=0; j < n3; j++) zi_1[j] = zi[j];
   }
-
-  cerr << "AFTER WHILE" <<  endl;
-  cerr << "x: "; for (unsigned i=0; i < xi_1.size(); i++) cerr << toInt(xi_1[i]) << " "; cerr << endl;
-  cerr << "y: "; for (unsigned i=0; i < yi_1.size(); i++) cerr << toInt(yi_1[i]) << " "; cerr << endl;
-  cerr << "z: "; for (unsigned i=0; i < zi_1.size(); i++) cerr << toInt(zi_1[i]) << " "; cerr << endl;
-    
   
-  vector<Lit> xi (n1, lit_Error);
-  vector<Lit> zi (n3, lit_Error);
   for (unsigned j=1; j<min(n1,n3+1); j++) {
-    make2Comparator(xi_1[j], zi_1[j-1], zi[j-1], xi[j]);
+    Lit xout = lit_Error, zout = lit_Error;
+    make2Comparator(xi[j], zi[j-1], zout, xout);
+    xi[j] = xout; zi[j-1] = zout;
   }
-  for (unsigned j=1; j < min(n1,n3+1); j++) xi_1[j] = x[j];
-  for (unsigned j=0; j < min(n1-1,n3); j++) zi_1[j] = zi[j];
 
   // copy k elements to outvars
   for (unsigned j=0; j<k; j++)
-    outvars.push_back(j % 3 == 0 ? xi_1[j/3] : (j % 3 == 1 ? yi_1[j/3] : zi_1[j/3]));
-
+    outvars.push_back(j % 3 == 0 ? xi[j/3] : (j % 3 == 1 ? yi[j/3] : zi[j/3]));
+  
+  // set other literals to false
   for (unsigned j=(k+2)/3; j < n1; j++) 
-     if (xi_1[j] != lit_Undef) S->addClause(~xi_1[j]);
+     if (xi[j] != lit_Undef) S->addClause(~xi[j]);
   for (unsigned j=(k+1)/3; j < n2; j++) 
-     if (yi_1[j] != lit_Undef) S->addClause(~yi_1[j]);
+     if (yi[j] != lit_Undef) S->addClause(~yi[j]);
 }
 
 template<class Solver>
