@@ -1,6 +1,7 @@
 #!/bin/bash
 
 output_dir="converted/"
+e=$1
 
 mkdir $output_dir
 
@@ -17,6 +18,6 @@ for file in $(find msu4-suite -type f -name "*.cnfp.gz"); do
     
     file_path=$output_dir$file".cnf"
 
-    ../minicard_encodings/minicard_encodings_static -warn=0 -verb=3 -encode-type=8 -convert-to=1 $file > $file_path
+    ../minicard_encodings/minicard_encodings_static -warn=0 -verb=3 -encode-type=$e -convert-to=1 $file > $file_path
     gzip $file_path
 done

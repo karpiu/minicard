@@ -75,8 +75,6 @@ bool Encoding_MW<Solver>::make3wiseSel(vector<Lit>& invars, vector<Lit>& outvars
   unsigned n = invars.size();
 
   assert(k <= n);
-cerr<< "n = " << n << " k = " << k << endl;
-for (unsigned i=0; i < n; i++) cerr << toInt(invars[i]) << " "; cerr << endl;
 
   if((k<=1) || (k==2 && n <= 9) || (k==3 && n <= 6) || (k==4 && n <= 5) || (k==5 && n==5)) {
     makeDirectNetwork(invars, outvars, k < n ? k+1 : k);
@@ -85,9 +83,6 @@ for (unsigned i=0; i < n; i++) cerr << toInt(invars[i]) << " "; cerr << endl;
       S->addClause(~outvars[k]);
       outvars.pop_back();
     }
-    
-    cerr<< "outvars DIR:" << endl;
-    for (unsigned i=0; i < outvars.size(); i++) cerr << toInt(outvars[i]) << " "; cerr << endl;
     
     return true;
   }
@@ -129,9 +124,6 @@ for (unsigned i=0; i < n; i++) cerr << toInt(invars[i]) << " "; cerr << endl;
   // merging
   make3wiseMerge(_x, _y, _z, outvars, k);
 
-cerr<< "outvars MERGE:" << endl;
- for (unsigned i=0; i < outvars.size(); i++) cerr << toInt(outvars[i]) << " "; cerr << endl;
- 
   return true;
 }
 
@@ -309,7 +301,6 @@ bool Encoding_MW<Solver>::makeDirectNetwork(vector<Lit>& invars, vector<Lit>& ou
   unsigned n = invars.size();
   
   if (k == 0 || k > n) k = n;
-cerr<< "DIR: n = " << n << " k = " << k << endl;
 
   for (unsigned i=0 ; i < k ; i++) {
     S->newVar();
